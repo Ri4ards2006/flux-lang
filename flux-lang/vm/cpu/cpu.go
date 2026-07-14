@@ -1,16 +1,22 @@
 // Package cpu implements the flux virtual machine.
 //
-// The CPU is a tiny single-threaded interpreter: a 16-register
-// register file, a program counter, a flat copy of the loaded
-// bytecode, and a flat constant pool. Run() walks the bytecode one
-// instruction at a time, dispatching each opcode to a small handler.
+// The VM is single-threaded and small: a 16-register register file,
+// a program counter, a copy of the loaded bytecode, and a parsed
+// constant pool. Run() walks the bytecode one instruction at a time
+// through a single dispatchOne() helper.
 //
-// OP_TRIGGER_PIN and OP_SEND_CHAT print to stdout — they are
-// simulations of GPIO toggles and Twitch chat messages respectively.
+// OP_MOV_REG_STR heap-copies a constant-pool string (plus a NUL
+// terminator) into RAM and stores the returned address in the
+// destination register.
 //
-// OP_ON_CHAT just skips its associated body bytes; the VM does not
-// have a chat subsystem yet, so the block can never fire during
-// top-down execution. That wiring is the next phase.
+// OP_ON_CHAT appends an EventSubscription to ActiveSubscriptions
+// and skips the body's bytes during top-down execution. The body
+// only fires when DeliverChatMessage matches a subscription's
+// pattern via DeliverChatMessage(username, message) — at which
+// point the user_var register is set to a heap-resident copy of
+// the sender's username, the body is dispatched instruction by
+// instruction until exactly BodyLength bytes have been consumed,
+// and the username block is freed before returning.
 package cpu
 
 import (
@@ -38,15 +44,26 @@ const (
 const (
 	FlxMagic     = "FLUX"
 	FlxVersion   byte = 1
-	FlxHeaderSize     = 4 + 1 + 2 + 4 + 4 // magic|ver|count|codeOff|codeSize = 15
+	FlxHeaderSize     = 4 + 1 + 2 + 4 + 4 // 15
 )
 
-// CPU is the in-memory state of one running flux program.
+// EventSubscription holds one ON_CHAT registration. BodyOffset and
+// BodyLength are absolute offsets into c.Bytecode.
+type EventSubscription struct {
+	Pattern    string
+	UserVarReg uint8   // 1..16
+	BodyOffset uint32  // byte offset within the code section
+	BodyLength uint32  // size of the body in bytes
+}
+
+// CPU is the volatile state of one running flux program.
 type CPU struct {
-	Registers [16]uint32
-	PC        uint32
-	Bytecode  []byte
-	Constants []string
+	Registers           [16]uint32
+	PC                  uint32
+	Bytecode            []byte
+	Constants           []string
+	ActiveSubscriptions []EventSubscription
+	Logs                []string
 }
 
 // New returns a CPU ready to LoadBinary.
@@ -54,8 +71,15 @@ func New() *CPU {
 	return &CPU{}
 }
 
-// LoadBinary validates the FLUX header, parses the constant pool, and
-// copies the code section into the CPU's bytecode slice.
+// log appends a formatted line to c.Logs. UI code (e.g. main.go)
+// can flush c.Logs to stdout after Run() or after each chat
+// delivery.
+func (c *CPU) log(format string, args ...interface{}) {
+	c.Logs = append(c.Logs, fmt.Sprintf(format, args...))
+}
+
+// LoadBinary validates the FLUX header, parses the constant pool,
+// and copies the code section into c.Bytecode.
 func (c *CPU) LoadBinary(data []byte) error {
 	if len(data) < FlxHeaderSize {
 		return errors.New(".flx file too short for header")
@@ -104,49 +128,63 @@ func parseConstants(pool []byte, n int) ([]string, error) {
 	return out, nil
 }
 
-// Run executes the loaded bytecode until PC walks off the end or an
-// instruction returns an error.
+// Run executes the loaded bytecode until PC walks off the end of
+// the code section or an instruction returns an error.
 func (c *CPU) Run() error {
 	for c.PC < uint32(len(c.Bytecode)) {
-		op := c.Bytecode[c.PC]
-		switch op {
-		case OP_ALLOC:
-			if err := c.opAlloc(); err != nil {
-				return err
-			}
-		case OP_FREE:
-			if err := c.opFree(); err != nil {
-				return err
-			}
-		case OP_MOV_REG_REG:
-			c.opMovRegReg()
-		case OP_MOV_REG_INT:
-			c.opMovRegInt()
-		case OP_MOV_REG_STR:
-			c.opMovRegStr()
-		case OP_TRIGGER_PIN:
-			c.opTriggerPin()
-		case OP_SEND_CHAT:
-			c.opSendChat()
-		case OP_ON_CHAT:
-			if err := c.opOnChat(); err != nil {
-				return err
-			}
-		default:
-			return fmt.Errorf("pc=%d: unknown opcode 0x%02x", c.PC, op)
+		if err := c.dispatchOne(); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-// registerCode converts the wire-format register code (1..16) into
-// the Registers[] slice index (0..15).
+// dispatchOne decodes and executes the single instruction at c.PC.
+// Both Run() and DeliverChatMessage() drive themselves through this
+// helper so opcode behaviour stays consistent on every path.
+func (c *CPU) dispatchOne() error {
+	if c.PC >= uint32(len(c.Bytecode)) {
+		return nil
+	}
+	op := c.Bytecode[c.PC]
+	switch op {
+	case OP_ALLOC:
+		return c.opAlloc()
+	case OP_FREE:
+		return c.opFree()
+	case OP_MOV_REG_REG:
+		c.opMovRegReg()
+		return nil
+	case OP_MOV_REG_INT:
+		c.opMovRegInt()
+		return nil
+	case OP_MOV_REG_STR:
+		return c.opMovRegStr()
+	case OP_TRIGGER_PIN:
+		c.opTriggerPin()
+		return nil
+	case OP_SEND_CHAT:
+		c.opSendChat()
+		return nil
+	case OP_ON_CHAT:
+		return c.opOnChat()
+	default:
+		return fmt.Errorf("pc=%d: unknown opcode 0x%02x", c.PC, op)
+	}
+}
+
+// registerCode converts the wire-format register code (1..16) to the
+// Registers[] slice index (0..15). Out-of-range codes default to 0.
 func registerCode(reg byte) uint8 {
 	if reg < 1 || reg > 16 {
 		return 0
 	}
 	return reg - 1
 }
+
+// ---------------------------------------------------------------------------
+// Per-opcode handlers
+// ---------------------------------------------------------------------------
 
 func (c *CPU) opAlloc() error {
 	if c.PC+6 > uint32(len(c.Bytecode)) {
@@ -190,26 +228,47 @@ func (c *CPU) opMovRegInt() {
 	c.PC += 6
 }
 
-// opMovRegStr stores the constant-pool index into the destination
-// register. We do not copy the string into the heap yet — the bare
-// VM only needs to remember which constant a SEND_CHAT will read.
-func (c *CPU) opMovRegStr() {
+// opMovRegStr copies the constant-pool string (plus a trailing NUL
+// terminator) into a freshly-allocated RAM block and stores the
+// returned address in the destination register. This replaces the
+// heap address the previous ALLOC put there — programs that want
+// to keep both blocks must use distinct registers.
+func (c *CPU) opMovRegStr() error {
+	if c.PC+6 > uint32(len(c.Bytecode)) {
+		return errors.New("MOV_REG_STR truncated")
+	}
 	dst := c.Bytecode[c.PC+1]
 	idx := binary.BigEndian.Uint32(c.Bytecode[c.PC+2 : c.PC+6])
-	c.Registers[registerCode(dst)] = idx
+	if int(idx) >= len(c.Constants) {
+		return fmt.Errorf("MOV_REG_STR: constant index %d out of range (pool=%d)", idx, len(c.Constants))
+	}
+	s := c.Constants[idx]
+
+	addr, err := memory.Alloc(uint32(len(s) + 1))
+	if err != nil {
+		return fmt.Errorf("MOV_REG_STR: %w", err)
+	}
+	for i := 0; i < len(s); i++ {
+		memory.RAM[addr+uint32(i)] = s[i]
+	}
+	memory.RAM[addr+uint32(len(s))] = 0
+
+	c.Registers[registerCode(dst)] = addr
 	c.PC += 6
+	return nil
 }
 
 func (c *CPU) opTriggerPin() {
 	pin := c.Bytecode[c.PC+1]
 	state := c.Bytecode[c.PC+2]
-	fmt.Printf("TRIGGER_PIN pin=%d state=%d\n", pin, state)
+	c.log("TRIGGER_PIN pin=%d state=%d", pin, state)
 	c.PC += 3
 }
 
-// opSendChat honours the high-bit-tagged operand the wire format
-// uses: bits other than the top one are either a register code or a
-// constant-pool index.
+// opSendChat honours the high-bit-tagged operand convention: setting
+// bit 31 denotes a constant-pool index, clearing it denotes a
+// register code whose value should be interpreted as a heap address
+// holding a NUL-terminated C-string.
 func (c *CPU) opSendChat() {
 	const highBit uint32 = 0x80000000
 	operand := binary.BigEndian.Uint32(c.Bytecode[c.PC+1 : c.PC+5])
@@ -217,25 +276,113 @@ func (c *CPU) opSendChat() {
 	if operand&highBit != 0 {
 		idx := operand &^ highBit
 		if int(idx) < len(c.Constants) {
-			fmt.Printf("SEND_CHAT %q\n", c.Constants[idx])
+			c.log("SEND_CHAT %q", c.Constants[idx])
 		}
 	} else {
 		reg := byte(operand)
-		idx := c.Registers[registerCode(reg)]
-		if int(idx) < len(c.Constants) {
-			fmt.Printf("SEND_CHAT %q\n", c.Constants[idx])
+		addr := c.Registers[registerCode(reg)]
+		if addr >= memory.HeaderSize && addr < memory.RAMSize {
+			end := addr
+			for end < memory.RAMSize && memory.RAM[end] != 0 {
+				end++
+			}
+			if end < memory.RAMSize {
+				c.log("SEND_CHAT %q", string(memory.RAM[addr:end]))
+			}
 		}
 	}
 	c.PC += 5
 }
 
-// opOnChat just skips past the body. There is no chat subsystem yet
-// so the body never fires during top-down execution.
+// opOnChat registers the event and skips the body during top-down
+// execution. The body only fires when DeliverChatMessage
+// explicitly dispatches it.
 func (c *CPU) opOnChat() error {
 	if c.PC+14 > uint32(len(c.Bytecode)) {
 		return errors.New("ON_CHAT header truncated")
 	}
-	bodyLen := binary.BigEndian.Uint32(c.Bytecode[c.PC+10 : c.PC+14])
-	c.PC += 14 + bodyLen
+	triggerIdx := binary.BigEndian.Uint32(c.Bytecode[c.PC+1 : c.PC+5])
+	userVar := c.Bytecode[c.PC+5]
+	bodyOffset := binary.BigEndian.Uint32(c.Bytecode[c.PC+6 : c.PC+10])
+	bodyLength := binary.BigEndian.Uint32(c.Bytecode[c.PC+10 : c.PC+14])
+
+	if int(triggerIdx) >= len(c.Constants) {
+		return fmt.Errorf("ON_CHAT: trigger index %d out of range", triggerIdx)
+	}
+
+	c.ActiveSubscriptions = append(c.ActiveSubscriptions, EventSubscription{
+		Pattern:    c.Constants[triggerIdx],
+		UserVarReg: userVar,
+		BodyOffset: bodyOffset,
+		BodyLength: bodyLength,
+	})
+	c.log("ON_CHAT subscribed pattern=%q user_var=R%d body=[%d..%d)",
+		c.Constants[triggerIdx], userVar, bodyOffset, bodyOffset+bodyLength)
+
+	c.PC += 14 + bodyLength
 	return nil
+}
+
+// DeliverChatMessage fires every subscription whose Pattern exactly
+// equals message. For each match it:
+//
+//  1. Allocates a heap block for username + NUL,
+//  2. Writes the username into that block and stores the address
+//     in the subscription's UserVarReg,
+//  3. Saves the current PC, jumps the PC to the body's offset, and
+//     dispatches instructions until exactly BodyLength bytes have
+//     been consumed,
+//  4. Frees the username block,
+//  5. Restores the saved PC.
+//
+// Dispatch errors inside a body are logged but do not abort the
+// function — the machine keeps going to the next subscription.
+func (c *CPU) DeliverChatMessage(username, message string) {
+	for _, sub := range c.ActiveSubscriptions {
+		if sub.Pattern != message {
+			continue
+		}
+		if sub.UserVarReg < 1 || sub.UserVarReg > 16 {
+			c.log("DeliverChatMessage: subscription %q has invalid user_var=%d",
+				sub.Pattern, sub.UserVarReg)
+			continue
+		}
+
+		addr, err := memory.Alloc(uint32(len(username) + 1))
+		if err != nil {
+			c.log("DeliverChatMessage: alloc username: %v", err)
+			continue
+		}
+		for i := 0; i < len(username); i++ {
+			memory.RAM[addr+uint32(i)] = username[i]
+		}
+		memory.RAM[addr+uint32(len(username))] = 0
+
+		c.Registers[sub.UserVarReg-1] = addr
+		c.log(">>> ON_CHAT match pattern=%q username=%q user_var=R%d username_addr=%d",
+			sub.Pattern, username, sub.UserVarReg, addr)
+
+		savedPC := c.PC
+		c.PC = sub.BodyOffset
+		bodyEnd := sub.BodyOffset + sub.BodyLength
+		// Loop while we're still inside the declared body AND still
+		// inside the loaded bytecode. The second guard is defensive:
+		// if a hand-crafted .flx declares body_length larger than the
+		// remaining code, we must not spin when dispatchOne returns
+		// nil for a PC that already walked off the end.
+		codeEnd := uint32(len(c.Bytecode))
+		for c.PC < bodyEnd && c.PC < codeEnd {
+			if err := c.dispatchOne(); err != nil {
+				c.log("chat dispatch: %v", err)
+				break
+			}
+		}
+		c.log("<<< ON_CHAT block end")
+
+		if err := memory.Free(addr); err != nil {
+			c.log("DeliverChatMessage: free username: %v", err)
+		}
+
+		c.PC = savedPC
+	}
 }
