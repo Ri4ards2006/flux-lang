@@ -52,3 +52,4 @@ go run . path/to/source.fx
 4. **ASCII by design.** The language keywords are ASCII, so the lexer
    operates on bytes and avoids `unicode`/`utf8` decode costs on the hot
    path.
+ 
