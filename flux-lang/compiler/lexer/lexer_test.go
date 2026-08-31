@@ -169,3 +169,102 @@ func TestNegativeNumberRejected(t *testing.T) {
 		t.Fatalf("expected ILLEGAL literal to be \"-\", got %q", tok.Literal)
 	}
 }
+
+// TestAllALUKeywordsCovered checks that all 9 ALU keywords are tokenized
+// with the correct TokenType and literal values.
+func TestAllALUKeywordsCovered(t *testing.T) {
+	input := "ADD SUB MUL DIV AND OR XOR SHL SHR"
+	expected := []struct {
+		typ TokenType
+		lit string
+	}{
+		{TOKEN_ADD, "ADD"},
+		{TOKEN_SUB, "SUB"},
+		{TOKEN_MUL, "MUL"},
+		{TOKEN_DIV, "DIV"},
+		{TOKEN_AND, "AND"},
+		{TOKEN_OR, "OR"},
+		{TOKEN_XOR, "XOR"},
+		{TOKEN_SHL, "SHL"},
+		{TOKEN_SHR, "SHR"},
+	}
+
+	l := New(input)
+	for i, want := range expected {
+		tok := l.NextToken()
+		if tok.Type != want.typ {
+			t.Fatalf("ALU[%d] type mismatch: expected=%q got=%q (literal=%q)",
+				i, want.typ, tok.Type, tok.Literal)
+		}
+		if tok.Literal != want.lit {
+			t.Fatalf("ALU[%d] literal mismatch: expected=%q got=%q (type=%q)",
+				i, want.lit, tok.Literal, tok.Type)
+		}
+	}
+	if (l.NextToken()).Type != TOKEN_EOF {
+		t.Fatalf("expected EOF after SHR")
+	}
+}
+
+// TestControlFlowKeywordsCovered checks CMP, JMP, JZ, JNZ tokenization.
+func TestControlFlowKeywordsCovered(t *testing.T) {
+	input := "CMP JMP JZ JNZ"
+	expected := []struct {
+		typ TokenType
+		lit string
+	}{
+		{TOKEN_CMP, "CMP"},
+		{TOKEN_JMP, "JMP"},
+		{TOKEN_JZ, "JZ"},
+		{TOKEN_JNZ, "JNZ"},
+	}
+
+	l := New(input)
+	for i, want := range expected {
+		tok := l.NextToken()
+		if tok.Type != want.typ {
+			t.Fatalf("ControlFlow[%d] type mismatch: expected=%q got=%q (literal=%q)",
+				i, want.typ, tok.Type, tok.Literal)
+		}
+		if tok.Literal != want.lit {
+			t.Fatalf("ControlFlow[%d] literal mismatch: expected=%q got=%q (type=%q)",
+				i, want.lit, tok.Literal, tok.Type)
+		}
+	}
+	if (l.NextToken()).Type != TOKEN_EOF {
+		t.Fatalf("expected EOF after JNZ")
+	}
+}
+
+// TestLabelTokenization verifies that label definitions emit IDENT + COLON.
+func TestLabelTokenization(t *testing.T) {
+	input := "loop_start:\n  CMP R1, R2\n  JNZ loop_start\n"
+	expected := []struct {
+		typ TokenType
+		lit string
+	}{
+		{TOKEN_IDENT, "loop_start"},
+		{TOKEN_COLON, ":"},
+		{TOKEN_CMP, "CMP"},
+		{TOKEN_R1, "R1"},
+		{TOKEN_COMMA, ","},
+		{TOKEN_R2, "R2"},
+		{TOKEN_JNZ, "JNZ"},
+		{TOKEN_IDENT, "loop_start"},
+		{TOKEN_EOF, ""},
+	}
+
+	l := New(input)
+	for i, want := range expected {
+		tok := l.NextToken()
+		if tok.Type != want.typ {
+			t.Fatalf("step %d: type mismatch: expected=%q got=%q (literal=%q)",
+				i, want.typ, tok.Type, tok.Literal)
+		}
+		if want.lit != "" && tok.Literal != want.lit {
+			t.Fatalf("step %d: literal mismatch: expected=%q got=%q",
+				i, want.lit, tok.Literal)
+		}
+	}
+}
+

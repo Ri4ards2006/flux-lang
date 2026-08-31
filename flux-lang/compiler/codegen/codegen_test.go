@@ -285,3 +285,110 @@ func TestEmit_RegisterEncodingRoundTrip(t *testing.T) {
 		t.Errorf("encodeRegister(R17) should have failed")
 	}
 }
+
+// TestEmit_ALUInstructions verifies that all 9 ALU instructions emit
+// the exact 3-byte bytecode [Opcode][DstReg][SrcReg].
+func TestEmit_ALUInstructions(t *testing.T) {
+	input := `ADD R1, R2
+SUB R3, R4
+MUL R5, R6
+DIV R7, R8
+AND R9, R10
+OR R11, R12
+XOR R13, R14
+SHL R15, R16
+SHR R1, R2
+`
+	prog := parseSrc(t, input)
+	c := New()
+	if err := c.Compile(prog); err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	if errs := c.Errors(); len(errs) > 0 {
+		t.Fatalf("codegen reported errors: %v", errs)
+	}
+
+	code := c.Code()
+	wantCode := []byte{
+		OP_ADD, 1, 2,
+		OP_SUB, 3, 4,
+		OP_MUL, 5, 6,
+		OP_DIV, 7, 8,
+		OP_AND, 9, 10,
+		OP_OR, 11, 12,
+		OP_XOR, 13, 14,
+		OP_SHL, 15, 16,
+		OP_SHR, 1, 2,
+	}
+
+	if !bytes.Equal(code, wantCode) {
+		t.Fatalf("ALU bytecode mismatch:\n got:  %x\n want: %x", code, wantCode)
+	}
+}
+
+// TestEmit_ControlFlowAndJumps tests label backpatching for forward and backward jumps.
+func TestEmit_ControlFlowAndJumps(t *testing.T) {
+	// target offsets:
+	// 0..3:   CMP R1, R2 (3 bytes)
+	// 3..8:   JZ forward_target (5 bytes, placeholder patched to 13)
+	// 8..13:  JMP loop_head (5 bytes, placeholder patched to 0)
+	// 13..16: forward_target: SUB R1, R2 (3 bytes)
+	input := `loop_head:
+  CMP R1, R2
+  JZ forward_target
+  JMP loop_head
+forward_target:
+  SUB R1, R2
+`
+	prog := parseSrc(t, input)
+	c := New()
+	if err := c.Compile(prog); err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	if errs := c.Errors(); len(errs) > 0 {
+		t.Fatalf("codegen reported errors: %v", errs)
+	}
+
+	code := c.Code()
+	wantCode := []byte{
+		// 0..3: CMP R1, R2
+		OP_CMP, 1, 2,
+		// 3..8: JZ target 13 (0x0000000D)
+		OP_JZ, 0x00, 0x00, 0x00, 0x0D,
+		// 8..13: JMP target 0 (0x00000000)
+		OP_JMP, 0x00, 0x00, 0x00, 0x00,
+		// 13..16: SUB R1, R2
+		OP_SUB, 1, 2,
+	}
+
+	if !bytes.Equal(code, wantCode) {
+		t.Fatalf("Control flow bytecode mismatch:\n got:  %x\n want: %x", code, wantCode)
+	}
+}
+
+// TestEmit_DuplicateLabelError ensures declaring the same label twice is rejected.
+func TestEmit_DuplicateLabelError(t *testing.T) {
+	input := `loop:
+  MOV R1, 1
+loop:
+  MOV R1, 2
+`
+	prog := parseSrc(t, input)
+	c := New()
+	_ = c.Compile(prog)
+	if len(c.Errors()) == 0 {
+		t.Fatalf("expected duplicate label error, got none")
+	}
+}
+
+// TestEmit_UndefinedLabelError ensures jumping to an undefined label reports an error.
+func TestEmit_UndefinedLabelError(t *testing.T) {
+	input := `JMP does_not_exist`
+	prog := parseSrc(t, input)
+	c := New()
+	_ = c.Compile(prog)
+	if len(c.Errors()) == 0 {
+		t.Fatalf("expected undefined label error, got none")
+	}
+}
+

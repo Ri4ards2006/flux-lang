@@ -108,6 +108,22 @@ func writeStatement(b *strings.Builder, s Statement, indent string) {
 		for _, child := range v.Body {
 			writeStatement(b, child, indent+"  ")
 		}
+
+	case *ALUStmt:
+		fmt.Fprintf(b, "%sALUStmt { op=%s, dst=%s, src=%s }\n",
+			indent, v.Op, v.DstReg.Value, v.SrcReg.Value)
+
+	case *LabelStmt:
+		fmt.Fprintf(b, "%sLabelStmt { name=%s }\n",
+			indent, v.Name)
+
+	case *CmpStmt:
+		fmt.Fprintf(b, "%sCmpStmt { reg1=%s, reg2=%s }\n",
+			indent, v.Reg1.Value, v.Reg2.Value)
+
+	case *JumpStmt:
+		fmt.Fprintf(b, "%sJumpStmt { op=%s, label=%s }\n",
+			indent, v.Op, v.Label)
 	}
 }
 
@@ -203,6 +219,46 @@ type OnChatBlock struct {
 
 func (s *OnChatBlock) statementNode()   {}
 func (s *OnChatBlock) TokenLiteral() string { return s.Token.Literal }
+
+// ALUStmt models `<OP> <DstReg>, <SrcReg>` (e.g. `ADD R1, R2`).
+type ALUStmt struct {
+	Token  lexer.Token
+	Op     lexer.TokenType
+	DstReg *RegisterLiteral
+	SrcReg *RegisterLiteral
+}
+
+func (s *ALUStmt) statementNode()       {}
+func (s *ALUStmt) TokenLiteral() string { return s.Token.Literal }
+
+// LabelStmt models `<ident>:` (e.g. `loop_start:`).
+type LabelStmt struct {
+	Token lexer.Token
+	Name  string
+}
+
+func (s *LabelStmt) statementNode()       {}
+func (s *LabelStmt) TokenLiteral() string { return s.Token.Literal }
+
+// CmpStmt models `CMP <reg1>, <reg2>`.
+type CmpStmt struct {
+	Token lexer.Token
+	Reg1  *RegisterLiteral
+	Reg2  *RegisterLiteral
+}
+
+func (s *CmpStmt) statementNode()       {}
+func (s *CmpStmt) TokenLiteral() string { return s.Token.Literal }
+
+// JumpStmt models `JMP <label>`, `JZ <label>`, or `JNZ <label>`.
+type JumpStmt struct {
+	Token lexer.Token
+	Op    lexer.TokenType
+	Label string
+}
+
+func (s *JumpStmt) statementNode()       {}
+func (s *JumpStmt) TokenLiteral() string { return s.Token.Literal }
 
 // ----------------------------------------------------------------------------
 // Operand / Expression nodes

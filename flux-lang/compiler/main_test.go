@@ -197,3 +197,38 @@ func TestRun_FlagPrecedence(t *testing.T) {
 		t.Errorf("Magic mismatch: got %q", data[0:4])
 	}
 }
+
+// TestRun_OutFlag_ALUAndControlFlowProgram verifies that a program mixing memory ops,
+// ALU arithmetic, comparisons, and loops with labels compiles to a valid .flx binary.
+func TestRun_OutFlag_ALUAndControlFlowProgram(t *testing.T) {
+	const progFixture = `ALLOC R1, 16
+MOV R1, 10
+MOV R2, 1
+MOV R3, 0
+countdown_loop:
+  SUB R1, R2
+  CMP R1, R3
+  JNZ countdown_loop
+FREE R1
+`
+	dir := t.TempDir()
+	outPath := filepath.Join(dir, "loop.flx")
+
+	stdout, stderr := &strings.Builder{}, &strings.Builder{}
+	if err := run([]string{"-o", outPath}, strings.NewReader(progFixture), stdout, stderr); err != nil {
+		t.Fatalf("unexpected error compiling loop fixture: %v (stderr=%q)", err, stderr.String())
+	}
+
+	data, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("read -o output: %v", err)
+	}
+
+	if len(data) < 15 {
+		t.Fatalf("output file too small: %d bytes", len(data))
+	}
+	if string(data[0:4]) != "FLUX" {
+		t.Errorf("Magic mismatch: got %q, want %q", data[0:4], "FLUX")
+	}
+}
+

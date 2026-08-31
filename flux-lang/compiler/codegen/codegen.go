@@ -19,24 +19,35 @@ import (
 	"fmt"
 
 	"flux/compiler/ast"
+	"flux/compiler/lexer"
 )
+
+type jumpFixup struct {
+	offset    int
+	label     string
+	tokenType lexer.TokenType
+}
 
 // Compiler holds the in-progress bytecode buffer and constant pool.
 // A single Compiler instance is NOT safe for concurrent use; instantiate
 // one per goroutine.
 type Compiler struct {
-	bytecode  []byte          // flat instruction buffer (code section)
-	constants []string        // constant pool in insertion order
-	constMap  map[string]uint32 // dedup map: string -> pool index
-	errors    []error         // collected compile-time errors
+	bytecode   []byte            // flat instruction buffer (code section)
+	constants  []string          // constant pool in insertion order
+	constMap   map[string]uint32 // dedup map: string -> pool index
+	labels     map[string]uint32 // label name -> byte offset in bytecode
+	jumpFixups []jumpFixup       // pending label backpatches
+	errors     []error           // collected compile-time errors
 }
 
 // New returns an empty Compiler ready to walk an AST.
 func New() *Compiler {
 	return &Compiler{
-		bytecode:  []byte{},
-		constants: []string{},
-		constMap:  make(map[string]uint32),
+		bytecode:   []byte{},
+		constants:  []string{},
+		constMap:   make(map[string]uint32),
+		labels:     make(map[string]uint32),
+		jumpFixups: []jumpFixup{},
 	}
 }
 
@@ -132,6 +143,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 				return err
 			}
 		}
+		c.resolveJumps()
 		return nil
 
 	case *ast.AllocStmt:
@@ -146,6 +158,14 @@ func (c *Compiler) Compile(node ast.Node) error {
 		return c.emitSendChat(n)
 	case *ast.OnChatBlock:
 		return c.emitOnChat(n)
+	case *ast.ALUStmt:
+		return c.emitALU(n)
+	case *ast.LabelStmt:
+		return c.emitLabel(n)
+	case *ast.CmpStmt:
+		return c.emitCmp(n)
+	case *ast.JumpStmt:
+		return c.emitJump(n)
 
 	default:
 		return fmt.Errorf("codegen: unsupported AST node %T", node)
@@ -298,6 +318,114 @@ func (c *Compiler) emitOnChat(s *ast.OnChatBlock) error {
 	binary.BigEndian.PutUint32(c.bytecode[bodyLengthOffsetPos:bodyLengthOffsetPos+4], bodyLength)
 
 	return nil
+}
+
+// emitALU: <OP> <DstReg>, <SrcReg> → [OP] [DstReg:1] [SrcReg:1]
+func (c *Compiler) emitALU(s *ast.ALUStmt) error {
+	var op byte
+	switch s.Op {
+	case lexer.TOKEN_ADD:
+		op = OP_ADD
+	case lexer.TOKEN_SUB:
+		op = OP_SUB
+	case lexer.TOKEN_MUL:
+		op = OP_MUL
+	case lexer.TOKEN_DIV:
+		op = OP_DIV
+	case lexer.TOKEN_AND:
+		op = OP_AND
+	case lexer.TOKEN_OR:
+		op = OP_OR
+	case lexer.TOKEN_XOR:
+		op = OP_XOR
+	case lexer.TOKEN_SHL:
+		op = OP_SHL
+	case lexer.TOKEN_SHR:
+		op = OP_SHR
+	default:
+		c.errors = append(c.errors, fmt.Errorf("codegen: unsupported ALU op %s", s.Op))
+		return nil
+	}
+
+	dst, err := encodeRegister(s.DstReg.Value)
+	if err != nil {
+		c.errors = append(c.errors, fmt.Errorf("%s dst: %w", s.Op, err))
+		return nil
+	}
+
+	src, err := encodeRegister(s.SrcReg.Value)
+	if err != nil {
+		c.errors = append(c.errors, fmt.Errorf("%s src: %w", s.Op, err))
+		return nil
+	}
+
+	c.bytecode = append(c.bytecode, op, dst, src)
+	return nil
+}
+
+// emitLabel registers the current bytecode offset for the label name.
+func (c *Compiler) emitLabel(s *ast.LabelStmt) error {
+	if _, exists := c.labels[s.Name]; exists {
+		c.errors = append(c.errors, fmt.Errorf("duplicate label %q", s.Name))
+		return nil
+	}
+	c.labels[s.Name] = uint32(len(c.bytecode))
+	return nil
+}
+
+// emitCmp: CMP <Reg1>, <Reg2> → [OP_CMP] [Reg1:1] [Reg2:1]
+func (c *Compiler) emitCmp(s *ast.CmpStmt) error {
+	reg1, err := encodeRegister(s.Reg1.Value)
+	if err != nil {
+		c.errors = append(c.errors, fmt.Errorf("CMP reg1: %w", err))
+		return nil
+	}
+	reg2, err := encodeRegister(s.Reg2.Value)
+	if err != nil {
+		c.errors = append(c.errors, fmt.Errorf("CMP reg2: %w", err))
+		return nil
+	}
+	c.bytecode = append(c.bytecode, OP_CMP, reg1, reg2)
+	return nil
+}
+
+// emitJump: <JMP|JZ|JNZ> <label> → [OP] [TargetPC:Uint32 BE (placeholder)]
+func (c *Compiler) emitJump(s *ast.JumpStmt) error {
+	var op byte
+	switch s.Op {
+	case lexer.TOKEN_JMP:
+		op = OP_JMP
+	case lexer.TOKEN_JZ:
+		op = OP_JZ
+	case lexer.TOKEN_JNZ:
+		op = OP_JNZ
+	default:
+		c.errors = append(c.errors, fmt.Errorf("codegen: unsupported jump op %s", s.Op))
+		return nil
+	}
+
+	c.bytecode = append(c.bytecode, op)
+	fixupOffset := len(c.bytecode)
+	c.bytecode = binary.BigEndian.AppendUint32(c.bytecode, 0) // placeholder
+
+	c.jumpFixups = append(c.jumpFixups, jumpFixup{
+		offset:    fixupOffset,
+		label:     s.Label,
+		tokenType: s.Op,
+	})
+	return nil
+}
+
+// resolveJumps patches the TargetPC for all emitted jumps.
+func (c *Compiler) resolveJumps() {
+	for _, fixup := range c.jumpFixups {
+		targetOffset, ok := c.labels[fixup.label]
+		if !ok {
+			c.errors = append(c.errors, fmt.Errorf("%s: undefined label %q", fixup.tokenType, fixup.label))
+			continue
+		}
+		binary.BigEndian.PutUint32(c.bytecode[fixup.offset:fixup.offset+4], targetOffset)
+	}
 }
 
 // ---------------------------------------------------------------------------

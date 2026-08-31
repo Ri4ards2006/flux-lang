@@ -347,3 +347,167 @@ func TestParseProgram_SendChatIntRejected(t *testing.T) {
 		t.Errorf("expected a SEND_CHAT-related error, got: %v", errs)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Phase 1 (ALU, Bitwise & Control Flow) Parser Tests
+// ---------------------------------------------------------------------------
+
+// TestParseProgram_ALUStatements verifies parsing of all 9 ALU instructions.
+func TestParseProgram_ALUStatements(t *testing.T) {
+	input := `ADD R1, R2
+SUB R3, R4
+MUL R5, R6
+DIV R7, R8
+AND R9, R10
+OR R11, R12
+XOR R13, R14
+SHL R15, R16
+SHR R1, R2
+`
+	p := New(lexer.New(input))
+	prog := p.ParseProgram()
+
+	if errs := p.Errors(); len(errs) > 0 {
+		t.Fatalf("parser reported errors: %v", errs)
+	}
+	if len(prog.Statements) != 9 {
+		t.Fatalf("expected 9 statements, got %d (%s)", len(prog.Statements), prog.Dump())
+	}
+
+	expected := []struct {
+		op  lexer.TokenType
+		dst string
+		src string
+	}{
+		{lexer.TOKEN_ADD, "R1", "R2"},
+		{lexer.TOKEN_SUB, "R3", "R4"},
+		{lexer.TOKEN_MUL, "R5", "R6"},
+		{lexer.TOKEN_DIV, "R7", "R8"},
+		{lexer.TOKEN_AND, "R9", "R10"},
+		{lexer.TOKEN_OR, "R11", "R12"},
+		{lexer.TOKEN_XOR, "R13", "R14"},
+		{lexer.TOKEN_SHL, "R15", "R16"},
+		{lexer.TOKEN_SHR, "R1", "R2"},
+	}
+
+	for i, want := range expected {
+		alu, ok := prog.Statements[i].(*ast.ALUStmt)
+		if !ok {
+			t.Fatalf("stmt[%d] is not *ast.ALUStmt: %T", i, prog.Statements[i])
+		}
+		if alu.Op != want.op {
+			t.Errorf("stmt[%d] op = %s, want %s", i, alu.Op, want.op)
+		}
+		if alu.DstReg == nil || alu.DstReg.Value != want.dst {
+			t.Errorf("stmt[%d] dst = %v, want %s", i, alu.DstReg, want.dst)
+		}
+		if alu.SrcReg == nil || alu.SrcReg.Value != want.src {
+			t.Errorf("stmt[%d] src = %v, want %s", i, alu.SrcReg, want.src)
+		}
+	}
+}
+
+// TestParseProgram_ControlFlowStatements verifies parsing of CMP, JMP, JZ, JNZ, and labels.
+func TestParseProgram_ControlFlowStatements(t *testing.T) {
+	input := `start:
+  CMP R1, R2
+  JZ is_equal
+  JNZ not_equal
+  JMP start
+is_equal:
+  MOV R3, 1
+not_equal:
+  MOV R3, 2
+`
+	p := New(lexer.New(input))
+	prog := p.ParseProgram()
+
+	if errs := p.Errors(); len(errs) > 0 {
+		t.Fatalf("parser reported errors: %v", errs)
+	}
+	if len(prog.Statements) != 8 {
+		t.Fatalf("expected 8 statements, got %d (%s)", len(prog.Statements), prog.Dump())
+	}
+
+	// stmt 0: start:
+	lbl1, ok := prog.Statements[0].(*ast.LabelStmt)
+	if !ok || lbl1.Name != "start" {
+		t.Errorf("stmt[0] should be LabelStmt 'start', got %T (%+v)", prog.Statements[0], lbl1)
+	}
+
+	// stmt 1: CMP R1, R2
+	cmp, ok := prog.Statements[1].(*ast.CmpStmt)
+	if !ok || cmp.Reg1.Value != "R1" || cmp.Reg2.Value != "R2" {
+		t.Errorf("stmt[1] should be CmpStmt R1, R2, got %T (%+v)", prog.Statements[1], cmp)
+	}
+
+	// stmt 2: JZ is_equal
+	jz, ok := prog.Statements[2].(*ast.JumpStmt)
+	if !ok || jz.Op != lexer.TOKEN_JZ || jz.Label != "is_equal" {
+		t.Errorf("stmt[2] should be JZ 'is_equal', got %T (%+v)", prog.Statements[2], jz)
+	}
+
+	// stmt 3: JNZ not_equal
+	jnz, ok := prog.Statements[3].(*ast.JumpStmt)
+	if !ok || jnz.Op != lexer.TOKEN_JNZ || jnz.Label != "not_equal" {
+		t.Errorf("stmt[3] should be JNZ 'not_equal', got %T (%+v)", prog.Statements[3], jnz)
+	}
+
+	// stmt 4: JMP start
+	jmp, ok := prog.Statements[4].(*ast.JumpStmt)
+	if !ok || jmp.Op != lexer.TOKEN_JMP || jmp.Label != "start" {
+		t.Errorf("stmt[4] should be JMP 'start', got %T (%+v)", prog.Statements[4], jmp)
+	}
+}
+
+// TestParseProgram_LoopWithLabels tests parsing of loops within ON_CHAT blocks.
+func TestParseProgram_LoopWithLabels(t *testing.T) {
+	input := `ON_CHAT "!loop", R1
+  MOV R2, 10
+  loop_head:
+    SUB R2, R3
+    CMP R2, R4
+    JNZ loop_head
+FREE R1
+`
+	p := New(lexer.New(input))
+	prog := p.ParseProgram()
+
+	if errs := p.Errors(); len(errs) > 0 {
+		t.Fatalf("parser reported errors: %v", errs)
+	}
+	if len(prog.Statements) != 2 {
+		t.Fatalf("expected 2 top-level statements, got %d", len(prog.Statements))
+	}
+	oc, ok := prog.Statements[0].(*ast.OnChatBlock)
+	if !ok {
+		t.Fatalf("stmt[0] should be *ast.OnChatBlock, got %T", prog.Statements[0])
+	}
+	if len(oc.Body) != 5 {
+		t.Fatalf("ON_CHAT body should have 5 statements, got %d", len(oc.Body))
+	}
+}
+
+// TestParseProgram_ControlFlowSyntaxErrors tests diagnostic generation on malformed statements.
+func TestParseProgram_ControlFlowSyntaxErrors(t *testing.T) {
+	tests := []struct {
+		input string
+	}{
+		{"CMP R1"},
+		{"CMP 10, R2"},
+		{"CMP R1, 10"},
+		{"JMP"},
+		{"JZ 42"},
+		{"JNZ R1"},
+		{"unknown_ident"},
+	}
+
+	for _, tt := range tests {
+		p := New(lexer.New(tt.input))
+		_ = p.ParseProgram()
+		if len(p.Errors()) == 0 {
+			t.Errorf("input %q should produce parser errors, got none", tt.input)
+		}
+	}
+}
+

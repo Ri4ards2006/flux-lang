@@ -38,6 +38,23 @@ const (
 	// Hardware / IoT socket keywords.
 	TOKEN_TRIGGER_PIN TokenType = "TRIGGER_PIN"
 
+	// Arithmetic & bitwise ALU keywords.
+	TOKEN_ADD TokenType = "ADD"
+	TOKEN_SUB TokenType = "SUB"
+	TOKEN_MUL TokenType = "MUL"
+	TOKEN_DIV TokenType = "DIV"
+	TOKEN_AND TokenType = "AND"
+	TOKEN_OR  TokenType = "OR"
+	TOKEN_XOR TokenType = "XOR"
+	TOKEN_SHL TokenType = "SHL"
+	TOKEN_SHR TokenType = "SHR"
+
+	// Control flow & branching keywords.
+	TOKEN_CMP TokenType = "CMP"
+	TOKEN_JMP TokenType = "JMP"
+	TOKEN_JZ  TokenType = "JZ"
+	TOKEN_JNZ TokenType = "JNZ"
+
 	// Registers R1..R16. Declared explicitly so the test fixture can name
 	// each one without resorting to string-typed assertions.
 	TOKEN_R1  TokenType = "R1"
@@ -62,6 +79,7 @@ const (
 	TOKEN_INT    TokenType = "INT"
 	TOKEN_STRING TokenType = "STRING"
 	TOKEN_COMMA  TokenType = ","
+	TOKEN_COLON  TokenType = ":"
 	TOKEN_EOF    TokenType = "EOF"
 
 	// Anything flux does not understand.
@@ -100,6 +118,19 @@ var keywords = map[string]TokenType{
 	"ON_CHAT":     TOKEN_ON_CHAT,
 	"SEND_CHAT":   TOKEN_SEND_CHAT,
 	"TRIGGER_PIN": TOKEN_TRIGGER_PIN,
+	"ADD":         TOKEN_ADD,
+	"SUB":         TOKEN_SUB,
+	"MUL":         TOKEN_MUL,
+	"DIV":         TOKEN_DIV,
+	"AND":         TOKEN_AND,
+	"OR":          TOKEN_OR,
+	"XOR":         TOKEN_XOR,
+	"SHL":         TOKEN_SHL,
+	"SHR":         TOKEN_SHR,
+	"CMP":         TOKEN_CMP,
+	"JMP":         TOKEN_JMP,
+	"JZ":          TOKEN_JZ,
+	"JNZ":         TOKEN_JNZ,
 }
 
 // registerTokens is the single source of truth for every register name the
@@ -214,6 +245,14 @@ func (l *Lexer) NextToken() Token {
 	case ',':
 		tok := Token{
 			Type:    TOKEN_COMMA,
+			Literal: l.input[l.position : l.position+1],
+		}
+		l.readChar()
+		return tok
+
+	case ':':
+		tok := Token{
+			Type:    TOKEN_COLON,
 			Literal: l.input[l.position : l.position+1],
 		}
 		l.readChar()

@@ -38,6 +38,19 @@ const (
 	OP_TRIGGER_PIN byte = 0x06
 	OP_SEND_CHAT   byte = 0x07
 	OP_ON_CHAT     byte = 0x08
+	OP_ADD         byte = 0x09
+	OP_SUB         byte = 0x0A
+	OP_MUL         byte = 0x0B
+	OP_DIV         byte = 0x0C
+	OP_AND         byte = 0x0D
+	OP_OR          byte = 0x0E
+	OP_XOR         byte = 0x0F
+	OP_SHL         byte = 0x10
+	OP_SHR         byte = 0x11
+	OP_CMP         byte = 0x12
+	OP_JMP         byte = 0x13
+	OP_JZ          byte = 0x14
+	OP_JNZ         byte = 0x15
 )
 
 // .flx wire-format constants.
@@ -64,6 +77,8 @@ type CPU struct {
 	Constants           []string
 	ActiveSubscriptions []EventSubscription
 	Logs                []string
+	ZeroFlag            bool
+	SignFlag            bool
 }
 
 // New returns a CPU ready to LoadBinary.
@@ -168,6 +183,32 @@ func (c *CPU) dispatchOne() error {
 		return nil
 	case OP_ON_CHAT:
 		return c.opOnChat()
+	case OP_ADD:
+		return c.opAdd()
+	case OP_SUB:
+		return c.opSub()
+	case OP_MUL:
+		return c.opMul()
+	case OP_DIV:
+		return c.opDiv()
+	case OP_AND:
+		return c.opAnd()
+	case OP_OR:
+		return c.opOr()
+	case OP_XOR:
+		return c.opXor()
+	case OP_SHL:
+		return c.opShl()
+	case OP_SHR:
+		return c.opShr()
+	case OP_CMP:
+		return c.opCmp()
+	case OP_JMP:
+		return c.opJmp()
+	case OP_JZ:
+		return c.opJz()
+	case OP_JNZ:
+		return c.opJnz()
 	default:
 		return fmt.Errorf("pc=%d: unknown opcode 0x%02x", c.PC, op)
 	}
@@ -320,6 +361,176 @@ func (c *CPU) opOnChat() error {
 		c.Constants[triggerIdx], userVar, bodyOffset, bodyOffset+bodyLength)
 
 	c.PC += 14 + bodyLength
+	return nil
+}
+
+func (c *CPU) opAdd() error {
+	if c.PC+3 > uint32(len(c.Bytecode)) {
+		return errors.New("ADD truncated")
+	}
+	dst := registerCode(c.Bytecode[c.PC+1])
+	src := registerCode(c.Bytecode[c.PC+2])
+	c.Registers[dst] = c.Registers[dst] + c.Registers[src]
+	c.PC += 3
+	return nil
+}
+
+func (c *CPU) opSub() error {
+	if c.PC+3 > uint32(len(c.Bytecode)) {
+		return errors.New("SUB truncated")
+	}
+	dst := registerCode(c.Bytecode[c.PC+1])
+	src := registerCode(c.Bytecode[c.PC+2])
+	c.Registers[dst] = c.Registers[dst] - c.Registers[src]
+	c.PC += 3
+	return nil
+}
+
+func (c *CPU) opMul() error {
+	if c.PC+3 > uint32(len(c.Bytecode)) {
+		return errors.New("MUL truncated")
+	}
+	dst := registerCode(c.Bytecode[c.PC+1])
+	src := registerCode(c.Bytecode[c.PC+2])
+	c.Registers[dst] = c.Registers[dst] * c.Registers[src]
+	c.PC += 3
+	return nil
+}
+
+func (c *CPU) opDiv() error {
+	if c.PC+3 > uint32(len(c.Bytecode)) {
+		return errors.New("DIV truncated")
+	}
+	dst := registerCode(c.Bytecode[c.PC+1])
+	src := registerCode(c.Bytecode[c.PC+2])
+	if c.Registers[src] == 0 {
+		return errors.New("DIV: division by zero")
+	}
+	c.Registers[dst] = c.Registers[dst] / c.Registers[src]
+	c.PC += 3
+	return nil
+}
+
+func (c *CPU) opAnd() error {
+	if c.PC+3 > uint32(len(c.Bytecode)) {
+		return errors.New("AND truncated")
+	}
+	dst := registerCode(c.Bytecode[c.PC+1])
+	src := registerCode(c.Bytecode[c.PC+2])
+	c.Registers[dst] = c.Registers[dst] & c.Registers[src]
+	c.PC += 3
+	return nil
+}
+
+func (c *CPU) opOr() error {
+	if c.PC+3 > uint32(len(c.Bytecode)) {
+		return errors.New("OR truncated")
+	}
+	dst := registerCode(c.Bytecode[c.PC+1])
+	src := registerCode(c.Bytecode[c.PC+2])
+	c.Registers[dst] = c.Registers[dst] | c.Registers[src]
+	c.PC += 3
+	return nil
+}
+
+func (c *CPU) opXor() error {
+	if c.PC+3 > uint32(len(c.Bytecode)) {
+		return errors.New("XOR truncated")
+	}
+	dst := registerCode(c.Bytecode[c.PC+1])
+	src := registerCode(c.Bytecode[c.PC+2])
+	c.Registers[dst] = c.Registers[dst] ^ c.Registers[src]
+	c.PC += 3
+	return nil
+}
+
+func (c *CPU) opShl() error {
+	if c.PC+3 > uint32(len(c.Bytecode)) {
+		return errors.New("SHL truncated")
+	}
+	dst := registerCode(c.Bytecode[c.PC+1])
+	src := registerCode(c.Bytecode[c.PC+2])
+	shift := c.Registers[src]
+	if shift >= 32 {
+		c.Registers[dst] = 0
+	} else {
+		c.Registers[dst] = c.Registers[dst] << shift
+	}
+	c.PC += 3
+	return nil
+}
+
+func (c *CPU) opShr() error {
+	if c.PC+3 > uint32(len(c.Bytecode)) {
+		return errors.New("SHR truncated")
+	}
+	dst := registerCode(c.Bytecode[c.PC+1])
+	src := registerCode(c.Bytecode[c.PC+2])
+	shift := c.Registers[src]
+	if shift >= 32 {
+		c.Registers[dst] = 0
+	} else {
+		c.Registers[dst] = c.Registers[dst] >> shift
+	}
+	c.PC += 3
+	return nil
+}
+
+func (c *CPU) opCmp() error {
+	if c.PC+3 > uint32(len(c.Bytecode)) {
+		return errors.New("CMP truncated")
+	}
+	reg1 := registerCode(c.Bytecode[c.PC+1])
+	reg2 := registerCode(c.Bytecode[c.PC+2])
+	v1 := c.Registers[reg1]
+	v2 := c.Registers[reg2]
+	c.ZeroFlag = (v1 == v2)
+	c.SignFlag = (v1 < v2)
+	c.PC += 3
+	return nil
+}
+
+func (c *CPU) opJmp() error {
+	if c.PC+5 > uint32(len(c.Bytecode)) {
+		return errors.New("JMP truncated")
+	}
+	target := binary.BigEndian.Uint32(c.Bytecode[c.PC+1 : c.PC+5])
+	if target > uint32(len(c.Bytecode)) {
+		return fmt.Errorf("JMP: target %d out of bounds (code size %d)", target, len(c.Bytecode))
+	}
+	c.PC = target
+	return nil
+}
+
+func (c *CPU) opJz() error {
+	if c.PC+5 > uint32(len(c.Bytecode)) {
+		return errors.New("JZ truncated")
+	}
+	if c.ZeroFlag {
+		target := binary.BigEndian.Uint32(c.Bytecode[c.PC+1 : c.PC+5])
+		if target > uint32(len(c.Bytecode)) {
+			return fmt.Errorf("JZ: target %d out of bounds (code size %d)", target, len(c.Bytecode))
+		}
+		c.PC = target
+	} else {
+		c.PC += 5
+	}
+	return nil
+}
+
+func (c *CPU) opJnz() error {
+	if c.PC+5 > uint32(len(c.Bytecode)) {
+		return errors.New("JNZ truncated")
+	}
+	if !c.ZeroFlag {
+		target := binary.BigEndian.Uint32(c.Bytecode[c.PC+1 : c.PC+5])
+		if target > uint32(len(c.Bytecode)) {
+			return fmt.Errorf("JNZ: target %d out of bounds (code size %d)", target, len(c.Bytecode))
+		}
+		c.PC = target
+	} else {
+		c.PC += 5
+	}
 	return nil
 }
 

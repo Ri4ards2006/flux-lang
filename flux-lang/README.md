@@ -214,6 +214,19 @@ When `DeliverChatMessage("Richard", "!hype")` fires, the VM:
 | 0x06   | `OP_TRIGGER_PIN` | 0x06 | `[OP_TRIGGER_PIN] [Pin:Uint8] [State:Uint8]`                       |
 | 0x07   | `OP_SEND_CHAT`   | 0x07 | `[OP_SEND_CHAT] [Operand:Uint32 BE]` *(high-bit-tagged)*          |
 | 0x08   | `OP_ON_CHAT`     | 0x08 | `[OP_ON_CHAT] [TriggerIdx:Uint32 BE] [UserReg:1] [BodyStart:Uint32 BE] [BodyLength:Uint32 BE]` |
+| 0x09   | `OP_ADD`         | 0x09 | `[OP_ADD] [DstReg:1] [SrcReg:1]`                                  |
+| 0x0A   | `OP_SUB`         | 0x0A | `[OP_SUB] [DstReg:1] [SrcReg:1]`                                  |
+| 0x0B   | `OP_MUL`         | 0x0B | `[OP_MUL] [DstReg:1] [SrcReg:1]`                                  |
+| 0x0C   | `OP_DIV`         | 0x0C | `[OP_DIV] [DstReg:1] [SrcReg:1]`                                  |
+| 0x0D   | `OP_AND`         | 0x0D | `[OP_AND] [DstReg:1] [SrcReg:1]`                                  |
+| 0x0E   | `OP_OR`          | 0x0E | `[OP_OR]  [DstReg:1] [SrcReg:1]`                                  |
+| 0x0F   | `OP_XOR`         | 0x0F | `[OP_XOR] [DstReg:1] [SrcReg:1]`                                  |
+| 0x10   | `OP_SHL`         | 0x10 | `[OP_SHL] [DstReg:1] [SrcReg:1]`                                  |
+| 0x11   | `OP_SHR`         | 0x11 | `[OP_SHR] [DstReg:1] [SrcReg:1]`                                  |
+| 0x12   | `OP_CMP`         | 0x12 | `[OP_CMP] [Reg1:1] [Reg2:1]`                                      |
+| 0x13   | `OP_JMP`         | 0x13 | `[OP_JMP] [TargetPC:Uint32 BE]`                                   |
+| 0x14   | `OP_JZ`          | 0x14 | `[OP_JZ]  [TargetPC:Uint32 BE]`                                   |
+| 0x15   | `OP_JNZ`         | 0x15 | `[OP_JNZ] [TargetPC:Uint32 BE]`                                   |
 
 `OP_SEND_CHAT` carries a **tagged Uint32 operand**: the high bit cleared
 denotes a register code (`1..16`) whose value the VM reads as a heap

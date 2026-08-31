@@ -186,6 +186,30 @@ func (p *Parser) parseStatement() ast.Statement {
 		if s := p.parseOnChatBlock(); s != nil {
 			return s
 		}
+	case lexer.TOKEN_ADD, lexer.TOKEN_SUB, lexer.TOKEN_MUL, lexer.TOKEN_DIV,
+		lexer.TOKEN_AND, lexer.TOKEN_OR, lexer.TOKEN_XOR, lexer.TOKEN_SHL, lexer.TOKEN_SHR:
+		if s := p.parseALUStmt(); s != nil {
+			return s
+		}
+	case lexer.TOKEN_CMP:
+		if s := p.parseCmpStmt(); s != nil {
+			return s
+		}
+	case lexer.TOKEN_JMP, lexer.TOKEN_JZ, lexer.TOKEN_JNZ:
+		if s := p.parseJumpStmt(); s != nil {
+			return s
+		}
+	case lexer.TOKEN_IDENT:
+		if p.peekToken.Type == lexer.TOKEN_COLON {
+			if s := p.parseLabelStmt(); s != nil {
+				return s
+			}
+		} else {
+			p.errors = append(p.errors, fmt.Sprintf(
+				"unexpected identifier %q at statement position (did you mean to define a label with ':'?)",
+				p.curToken.Literal,
+			))
+		}
 	default:
 		p.errors = append(p.errors, fmt.Sprintf(
 			"unexpected token %s (literal=%q) at statement position",
@@ -351,6 +375,77 @@ func (p *Parser) parseOnChatBlock() *ast.OnChatBlock {
 		}
 	}
 
+	return stmt
+}
+
+// parseALUStmt: <OP> <DstReg>, <SrcReg>
+func (p *Parser) parseALUStmt() *ast.ALUStmt {
+	stmt := &ast.ALUStmt{
+		Token: p.curToken,
+		Op:    p.curToken.Type,
+	}
+
+	if !p.expectRegister() {
+		return nil
+	}
+	stmt.DstReg = p.parseRegisterLiteral()
+
+	if !p.expectPeek(lexer.TOKEN_COMMA) {
+		return nil
+	}
+
+	if !p.expectRegister() {
+		return nil
+	}
+	stmt.SrcReg = p.parseRegisterLiteral()
+
+	return stmt
+}
+
+// parseCmpStmt: CMP <Reg1>, <Reg2>
+func (p *Parser) parseCmpStmt() *ast.CmpStmt {
+	stmt := &ast.CmpStmt{Token: p.curToken}
+
+	if !p.expectRegister() {
+		return nil
+	}
+	stmt.Reg1 = p.parseRegisterLiteral()
+
+	if !p.expectPeek(lexer.TOKEN_COMMA) {
+		return nil
+	}
+
+	if !p.expectRegister() {
+		return nil
+	}
+	stmt.Reg2 = p.parseRegisterLiteral()
+
+	return stmt
+}
+
+// parseJumpStmt: <JMP|JZ|JNZ> <label>
+func (p *Parser) parseJumpStmt() *ast.JumpStmt {
+	stmt := &ast.JumpStmt{
+		Token: p.curToken,
+		Op:    p.curToken.Type,
+	}
+
+	if !p.expectPeek(lexer.TOKEN_IDENT) {
+		return nil
+	}
+	stmt.Label = p.curToken.Literal
+
+	return stmt
+}
+
+// parseLabelStmt: <ident>:
+func (p *Parser) parseLabelStmt() *ast.LabelStmt {
+	stmt := &ast.LabelStmt{
+		Token: p.curToken,
+		Name:  p.curToken.Literal,
+	}
+	// curToken is the IDENT; advance past the COLON
+	p.nextToken()
 	return stmt
 }
 
