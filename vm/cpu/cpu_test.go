@@ -519,7 +519,7 @@ func TestRun_JzAndJnzConditional(t *testing.T) {
 		OP_CMP, 0x01, 0x02,                          // 12..15
 		OP_JNZ, 0x00, 0x00, 0x00, 0x1A,              // 15..20 (JNZ to offset 26, should NOT jump)
 		OP_MOV_REG_INT, 0x03, 0x00, 0x00, 0x00, 0x01, // 20..26 (R3 = 1, executed!)
-		OP_JMP, 0x00, 0x00, 0x00, 0x20,              // 26..31 (JMP to 32)
+		OP_JMP, 0x00, 0x00, 0x00, 0x25,              // 26..31 (JMP to 37, EOF)
 		OP_MOV_REG_INT, 0x03, 0x00, 0x00, 0x00, 0x02, // 31..37 (R3 = 2, skipped)
 	}
 
@@ -601,43 +601,14 @@ func TestRun_JmpOutOfBounds(t *testing.T) {
 func TestRun_SubroutineCallAndReturn(t *testing.T) {
 	memory.Reset()
 
-	// Main:
-	// 0..6:   R1 = 20
-	// 6..11:  CALL double_func (offset 17)
-	// 11..17: R2 = 100 (after return)
-	// Subroutine double_func (offset 17):
-	// 17..20: ADD R1, R1 (R1 becomes 40)
-	// 20..21: RET
-	code := []byte{
-		OP_MOV_REG_INT, 0x01, 0x00, 0x00, 0x00, 0x14, // 0..6 (R1 = 20)
-		OP_CALL, 0x00, 0x00, 0x00, 0x11,              // 6..11 (CALL offset 17)
-		OP_MOV_REG_INT, 0x02, 0x00, 0x00, 0x00, 0x64, // 11..17 (R2 = 100)
-		OP_JMP, 0x00, 0x00, 0x00, 0x15,               // 17..22 (skip func body on linear exit, or we can place func at end)
-	}
-	// Let's lay it out cleanly:
-	// 0..6:   MOV R1, 20
-	// 6..11:  CALL 17
-	// 11..17: JMP 21 (exit)
-	// 17..20: ADD R1, R1
-	// 20..21: RET
-	codeClean := []byte{
-		OP_MOV_REG_INT, 0x01, 0x00, 0x00, 0x00, 0x14, // 0..6 (R1 = 20)
-		OP_CALL, 0x00, 0x00, 0x00, 0x10,              // 6..11 (CALL offset 16)
-		OP_MOV_REG_INT, 0x02, 0x00, 0x00, 0x00, 0x64, // 11..17 (R2 = 100)
-		OP_JMP, 0x00, 0x00, 0x00, 0x15,               // 17..22 (JMP to 21 EOF)
-		// offset 16 (0x10): double_func
-		OP_ADD, 0x01, 0x01,                           // 16..19 (R1 += R1 -> 40)
-		OP_RET,                                       // 19..20 (RET)
-	}
-
-	// Wait, let's calculate exact offsets for codeClean:
+	// Layout:
 	// 0..6:   MOV R1, 20 (6 bytes)
-	// 6..11:  CALL 17 (5 bytes)
+	// 6..11:  CALL 22 (5 bytes)
 	// 11..17: MOV R2, 100 (6 bytes)
 	// 17..22: JMP 26 (5 bytes)
 	// 22..25: ADD R1, R1 (3 bytes)
 	// 25..26: RET (1 byte)
-	exactCode := []byte{
+	code := []byte{
 		OP_MOV_REG_INT, 0x01, 0x00, 0x00, 0x00, 0x14, // 0..6: R1 = 20
 		OP_CALL, 0x00, 0x00, 0x00, 0x16,              // 6..11: CALL offset 22
 		OP_MOV_REG_INT, 0x02, 0x00, 0x00, 0x00, 0x64, // 11..17: R2 = 100
@@ -648,7 +619,7 @@ func TestRun_SubroutineCallAndReturn(t *testing.T) {
 	}
 
 	c := New()
-	if err := c.LoadBinary(encodeFLX(t, nil, exactCode)); err != nil {
+	if err := c.LoadBinary(encodeFLX(t, nil, code)); err != nil {
 		t.Fatalf("LoadBinary: %v", err)
 	}
 	if err := c.Run(); err != nil {
@@ -732,44 +703,24 @@ func TestRun_RecursiveSubroutine(t *testing.T) {
 	//   CALL recurse      (offset 43..48) -> target 29
 	// done (offset 48):
 	//   RET               (offset 48..49)
-	// end (offset 49)
-	code := []byte{
-		// Main (0..29)
-		OP_MOV_REG_INT, 0x01, 0x00, 0x00, 0x00, 0x04, // 0..6: R1 = 4
-		OP_MOV_REG_INT, 0x02, 0x00, 0x00, 0x00, 0x01, // 6..12: R2 = 1
-		OP_MOV_REG_INT, 0x03, 0x00, 0x00, 0x00, 0x00, // 12..18: R3 = 0
-		OP_MOV_REG_INT, 0x04, 0x00, 0x00, 0x00, 0x00, // 18..24: R4 = 0
-		OP_CALL, 0x00, 0x00, 0x00, 0x1D,              // 24..29: CALL 29 (recurse)
-		OP_JMP, 0x00, 0x00, 0x00, 0x31,               // 29..34: JMP 49 (end)
-
-		// recurse (offset 34):
-		OP_ADD, 0x04, 0x01,                           // 34..37: R4 += R1
-		OP_SUB, 0x01, 0x02,                           // 37..40: R1 -= 1
-		OP_CMP, 0x01, 0x03,                           // 40..43: CMP R1, 0
-		OP_JZ, 0x00, 0x00, 0x00, 0x30,                // 43..48: JZ 48 (done)
-		OP_CALL, 0x00, 0x00, 0x00, 0x22,              // 48..53: CALL 34 (recurse)
-		// done (offset 53):
-		OP_RET,                                       // 53..54: RET
-	}
-
-	// Correct offset adjustments:
+	// Layout:
 	// Main:
-	// 0..6:   MOV R1, 4
-	// 6..12:  MOV R2, 1
-	// 12..18: MOV R3, 0
-	// 18..24: MOV R4, 0
-	// 24..29: CALL 34 (offset 34)
-	// 29..34: JMP 54 (offset 54)
-	// recurse (34):
-	// 34..37: ADD R4, R1
-	// 37..40: SUB R1, R2
-	// 40..43: CMP R1, R3
-	// 43..48: JZ 53 (offset 53)
-	// 48..53: CALL 34 (offset 34)
-	// done (53):
-	// 53..54: RET
-	// end (54)
-	exactCode := []byte{
+	// 0..6:   MOV R1, 4 (6 bytes)
+	// 6..12:  MOV R2, 1 (6 bytes)
+	// 12..18: MOV R3, 0 (6 bytes)
+	// 18..24: MOV R4, 0 (6 bytes)
+	// 24..29: CALL 34 (5 bytes)
+	// 29..34: JMP 54 (5 bytes)
+	// recurse (offset 34 = 0x22):
+	// 34..37: ADD R4, R1 (3 bytes)
+	// 37..40: SUB R1, R2 (3 bytes)
+	// 40..43: CMP R1, R3 (3 bytes)
+	// 43..48: JZ 53 (5 bytes)
+	// 48..53: CALL 34 (5 bytes)
+	// done (offset 53 = 0x35):
+	// 53..54: RET (1 byte)
+	// end (offset 54)
+	code := []byte{
 		OP_MOV_REG_INT, 0x01, 0x00, 0x00, 0x00, 0x04,
 		OP_MOV_REG_INT, 0x02, 0x00, 0x00, 0x00, 0x01,
 		OP_MOV_REG_INT, 0x03, 0x00, 0x00, 0x00, 0x00,
@@ -787,7 +738,7 @@ func TestRun_RecursiveSubroutine(t *testing.T) {
 	}
 
 	c := New()
-	if err := c.LoadBinary(encodeFLX(t, nil, exactCode)); err != nil {
+	if err := c.LoadBinary(encodeFLX(t, nil, code)); err != nil {
 		t.Fatalf("LoadBinary: %v", err)
 	}
 	if err := c.Run(); err != nil {

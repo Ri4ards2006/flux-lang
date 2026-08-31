@@ -425,8 +425,8 @@ not_equal:
 	if errs := p.Errors(); len(errs) > 0 {
 		t.Fatalf("parser reported errors: %v", errs)
 	}
-	if len(prog.Statements) != 8 {
-		t.Fatalf("expected 8 statements, got %d (%s)", len(prog.Statements), prog.Dump())
+	if len(prog.Statements) != 9 {
+		t.Fatalf("expected 9 statements, got %d (%s)", len(prog.Statements), prog.Dump())
 	}
 
 	// stmt 0: start:
@@ -504,8 +504,8 @@ exit:
 	if errs := p.Errors(); len(errs) > 0 {
 		t.Fatalf("parser reported errors: %v", errs)
 	}
-	if len(prog.Statements) != 6 {
-		t.Fatalf("expected 6 statements, got %d (%s)", len(prog.Statements), prog.Dump())
+	if len(prog.Statements) != 7 {
+		t.Fatalf("expected 7 statements, got %d (%s)", len(prog.Statements), prog.Dump())
 	}
 
 	callStmt, ok := prog.Statements[1].(*ast.CallStmt)
@@ -513,9 +513,9 @@ exit:
 		t.Errorf("stmt[1] should be CallStmt 'my_subroutine', got %T (%+v)", prog.Statements[1], callStmt)
 	}
 
-	retStmt, ok := prog.Statements[4].(*ast.RetStmt)
+	retStmt, ok := prog.Statements[5].(*ast.RetStmt)
 	if !ok {
-		t.Errorf("stmt[4] should be RetStmt, got %T (%+v)", prog.Statements[4], retStmt)
+		t.Errorf("stmt[5] should be RetStmt, got %T (%+v)", prog.Statements[5], retStmt)
 	}
 }
 

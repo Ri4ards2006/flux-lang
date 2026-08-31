@@ -122,7 +122,7 @@ func (p *Parser) expectRegister() bool {
 // predictable scope boundary.
 func isBlockStarter(t lexer.TokenType) bool {
 	switch t {
-	case lexer.TOKEN_ALLOC, lexer.TOKEN_FREE, lexer.TOKEN_MOV, lexer.TOKEN_ON_CHAT:
+	case lexer.TOKEN_ALLOC, lexer.TOKEN_FREE, lexer.TOKEN_ON_CHAT:
 		return true
 	}
 	return false
