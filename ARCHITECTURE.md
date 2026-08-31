@@ -78,15 +78,6 @@ The virtual CPU implements a single-byte opcode format with big-endian immediate
 | `0x06` | `OP_TRIGGER_PIN` | `[0x06][Pin:1][State:1]` | Simulates GPIO logic state switch |
 | `0x07` | `OP_SEND_CHAT` | `[0x07][Operand:4 BE]` | Tagged operand: Bit 31 set = Constant Index; Bit 31 clear = Register pointer |
 | `0x08` | `OP_ON_CHAT` | `[0x08][TrigIdx:4][Reg:1][Start:4][Len:4]` | Registers event hook; skips body during linear execution |
-| `0x09` | `OP_ADD` | `[0x09][Dst:1][Src:1]` | `Registers[Dst] = Registers[Dst] + Registers[Src]` (wrapping) |
-| `0x0A` | `OP_SUB` | `[0x0A][Dst:1][Src:1]` | `Registers[Dst] = Registers[Dst] - Registers[Src]` (wrapping) |
-| `0x0B` | `OP_MUL` | `[0x0B][Dst:1][Src:1]` | `Registers[Dst] = Registers[Dst] * Registers[Src]` (wrapping) |
-| `0x0C` | `OP_DIV` | `[0x0C][Dst:1][Src:1]` | `Registers[Dst] = Registers[Dst] / Registers[Src]` (trap on 0) |
-| `0x0D` | `OP_AND` | `[0x0D][Dst:1][Src:1]` | `Registers[Dst] = Registers[Dst] & Registers[Src]` |
-| `0x0E` | `OP_OR` | `[0x0E][Dst:1][Src:1]` | `Registers[Dst] = Registers[Dst] \| Registers[Src]` |
-| `0x0F` | `OP_XOR` | `[0x0F][Dst:1][Src:1]` | `Registers[Dst] = Registers[Dst] ^ Registers[Src]` |
-| `0x10` | `OP_SHL` | `[0x10][Dst:1][Src:1]` | `Registers[Dst] = Registers[Dst] << Registers[Src]` (0 if $\ge 32$) |
-| `0x11` | `OP_SHR` | `[0x11][Dst:1][Src:1]` | `Registers[Dst] = Registers[Dst] >> Registers[Src]` (0 if $\ge 32$) |
 
 ---
 

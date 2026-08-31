@@ -186,11 +186,6 @@ func (p *Parser) parseStatement() ast.Statement {
 		if s := p.parseOnChatBlock(); s != nil {
 			return s
 		}
-	case lexer.TOKEN_ADD, lexer.TOKEN_SUB, lexer.TOKEN_MUL, lexer.TOKEN_DIV,
-		lexer.TOKEN_AND, lexer.TOKEN_OR, lexer.TOKEN_XOR, lexer.TOKEN_SHL, lexer.TOKEN_SHR:
-		if s := p.parseALUStmt(); s != nil {
-			return s
-		}
 	default:
 		p.errors = append(p.errors, fmt.Sprintf(
 			"unexpected token %s (literal=%q) at statement position",
@@ -355,30 +350,6 @@ func (p *Parser) parseOnChatBlock() *ast.OnChatBlock {
 			stmt.Body = append(stmt.Body, bodyStmt)
 		}
 	}
-
-	return stmt
-}
-
-// parseALUStmt: <OP> <DstReg>, <SrcReg>
-func (p *Parser) parseALUStmt() *ast.ALUStmt {
-	stmt := &ast.ALUStmt{
-		Token: p.curToken,
-		Op:    p.curToken.Type,
-	}
-
-	if !p.expectRegister() {
-		return nil
-	}
-	stmt.DstReg = p.parseRegisterLiteral()
-
-	if !p.expectPeek(lexer.TOKEN_COMMA) {
-		return nil
-	}
-
-	if !p.expectRegister() {
-		return nil
-	}
-	stmt.SrcReg = p.parseRegisterLiteral()
 
 	return stmt
 }

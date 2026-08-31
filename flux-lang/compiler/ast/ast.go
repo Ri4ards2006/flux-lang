@@ -108,10 +108,6 @@ func writeStatement(b *strings.Builder, s Statement, indent string) {
 		for _, child := range v.Body {
 			writeStatement(b, child, indent+"  ")
 		}
-
-	case *ALUStmt:
-		fmt.Fprintf(b, "%sALUStmt { op=%s, dst=%s, src=%s }\n",
-			indent, v.Op, v.DstReg.Value, v.SrcReg.Value)
 	}
 }
 
@@ -207,17 +203,6 @@ type OnChatBlock struct {
 
 func (s *OnChatBlock) statementNode()   {}
 func (s *OnChatBlock) TokenLiteral() string { return s.Token.Literal }
-
-// ALUStmt models `<OP> <DstReg>, <SrcReg>` (e.g. `ADD R1, R2`).
-type ALUStmt struct {
-	Token  lexer.Token
-	Op     lexer.TokenType
-	DstReg *RegisterLiteral
-	SrcReg *RegisterLiteral
-}
-
-func (s *ALUStmt) statementNode()       {}
-func (s *ALUStmt) TokenLiteral() string { return s.Token.Literal }
 
 // ----------------------------------------------------------------------------
 // Operand / Expression nodes

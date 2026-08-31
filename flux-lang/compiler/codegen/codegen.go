@@ -146,8 +146,6 @@ func (c *Compiler) Compile(node ast.Node) error {
 		return c.emitSendChat(n)
 	case *ast.OnChatBlock:
 		return c.emitOnChat(n)
-	case *ast.ALUStmt:
-		return c.emitALU(n)
 
 	default:
 		return fmt.Errorf("codegen: unsupported AST node %T", node)
@@ -299,49 +297,6 @@ func (c *Compiler) emitOnChat(s *ast.OnChatBlock) error {
 	binary.BigEndian.PutUint32(c.bytecode[bodyStartOffsetPos:bodyStartOffsetPos+4], uint32(bodyStart))
 	binary.BigEndian.PutUint32(c.bytecode[bodyLengthOffsetPos:bodyLengthOffsetPos+4], bodyLength)
 
-	return nil
-}
-
-// emitALU: <OP> <DstReg>, <SrcReg> → [OP] [DstReg:1] [SrcReg:1]
-func (c *Compiler) emitALU(s *ast.ALUStmt) error {
-	var op byte
-	switch s.Op {
-	case lexer.TOKEN_ADD:
-		op = OP_ADD
-	case lexer.TOKEN_SUB:
-		op = OP_SUB
-	case lexer.TOKEN_MUL:
-		op = OP_MUL
-	case lexer.TOKEN_DIV:
-		op = OP_DIV
-	case lexer.TOKEN_AND:
-		op = OP_AND
-	case lexer.TOKEN_OR:
-		op = OP_OR
-	case lexer.TOKEN_XOR:
-		op = OP_XOR
-	case lexer.TOKEN_SHL:
-		op = OP_SHL
-	case lexer.TOKEN_SHR:
-		op = OP_SHR
-	default:
-		c.errors = append(c.errors, fmt.Errorf("codegen: unsupported ALU op %s", s.Op))
-		return nil
-	}
-
-	dst, err := encodeRegister(s.DstReg.Value)
-	if err != nil {
-		c.errors = append(c.errors, fmt.Errorf("%s dst: %w", s.Op, err))
-		return nil
-	}
-
-	src, err := encodeRegister(s.SrcReg.Value)
-	if err != nil {
-		c.errors = append(c.errors, fmt.Errorf("%s src: %w", s.Op, err))
-		return nil
-	}
-
-	c.bytecode = append(c.bytecode, op, dst, src)
 	return nil
 }
 
