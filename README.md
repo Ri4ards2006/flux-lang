@@ -17,7 +17,7 @@
 
 <br>
 
-| <img src="./assets/kuro_mascot.jpeg" width="220" alt="Kuro (🦫) Mascot" /><br> **Kuro 🦫**<br>*The Compiler Beaver* | **flux-lang** is a zero-dependency, deterministic systems compiler and register virtual machine constructed entirely from first principles in pure Go.<br><br>Designed to bypass runtime garbage collector pauses ($\Delta t_{\text{GC}} = 0$), **flux-lang** translates human-readable systems assembly into a compact `.flx` binary wire format and executes it within a self-managed **1 MB static RAM island** equipped with 16 general-purpose registers, condition flags, an execution call stack, and first-fit heap management. |
+| <img src="./assets/kuro_mascot.jpeg" width="220" alt="Kuro Mascot" /><br>🦫 **Kuro (知流)**<br>*The Compiler Beaver* | **flux-lang** is a zero-dependency, deterministic systems compiler and register virtual machine constructed entirely from first principles in pure Go.<br><br>Designed to bypass runtime garbage collector pauses ($\Delta t_{\text{GC}} = 0$), **flux-lang** translates human-readable systems assembly into a compact `.flx` binary wire format and executes it within a self-managed **1 MB static RAM island** equipped with 16 general-purpose registers, condition flags, an execution call stack, and first-fit heap management. |
 | :---: | :--- |
 
 ---
@@ -170,7 +170,7 @@ The virtual heap operates entirely within a contiguous 1 MB array without callin
 You can pipe flux source code directly into the compiler CLI or compile a file to emit a `.flx` binary:
 
 ```bash
-cd flux-lang/compiler
+cd compiler
 
 # Compile a program utilizing subroutines, arithmetic, loops, and event hooks
 echo '
@@ -236,7 +236,7 @@ Execute all unit and integration test suites across both modules:
 
 ```bash
 # Test compiler (Lexer, Parser, AST, Codegen, CLI)
-cd flux-lang/compiler && go test ./... -v -count=1
+cd compiler && go test ./... -v -count=1
 
 # Test virtual machine (Heap Manager, CPU, ALU, Branching, CallStack)
 cd ../vm && go test ./... -v -count=1
