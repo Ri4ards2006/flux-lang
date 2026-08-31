@@ -347,3 +347,116 @@ func TestParseProgram_SendChatIntRejected(t *testing.T) {
 		t.Errorf("expected a SEND_CHAT-related error, got: %v", errs)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Phase 1 (ALU & Bitwise) Parser Tests
+// ---------------------------------------------------------------------------
+
+// TestParseProgram_ALUStatements verifies parsing of all 9 ALU instructions.
+func TestParseProgram_ALUStatements(t *testing.T) {
+	input := `ADD R1, R2
+SUB R3, R4
+MUL R5, R6
+DIV R7, R8
+AND R9, R10
+OR R11, R12
+XOR R13, R14
+SHL R15, R16
+SHR R1, R2
+`
+	p := New(lexer.New(input))
+	prog := p.ParseProgram()
+
+	if errs := p.Errors(); len(errs) > 0 {
+		t.Fatalf("parser reported errors: %v", errs)
+	}
+	if len(prog.Statements) != 9 {
+		t.Fatalf("expected 9 statements, got %d (%s)", len(prog.Statements), prog.Dump())
+	}
+
+	expected := []struct {
+		op  lexer.TokenType
+		dst string
+		src string
+	}{
+		{lexer.TOKEN_ADD, "R1", "R2"},
+		{lexer.TOKEN_SUB, "R3", "R4"},
+		{lexer.TOKEN_MUL, "R5", "R6"},
+		{lexer.TOKEN_DIV, "R7", "R8"},
+		{lexer.TOKEN_AND, "R9", "R10"},
+		{lexer.TOKEN_OR, "R11", "R12"},
+		{lexer.TOKEN_XOR, "R13", "R14"},
+		{lexer.TOKEN_SHL, "R15", "R16"},
+		{lexer.TOKEN_SHR, "R1", "R2"},
+	}
+
+	for i, want := range expected {
+		alu, ok := prog.Statements[i].(*ast.ALUStmt)
+		if !ok {
+			t.Fatalf("stmt[%d] is not *ast.ALUStmt: %T", i, prog.Statements[i])
+		}
+		if alu.Op != want.op {
+			t.Errorf("stmt[%d] op = %s, want %s", i, alu.Op, want.op)
+		}
+		if alu.DstReg == nil || alu.DstReg.Value != want.dst {
+			t.Errorf("stmt[%d] dst = %v, want %s", i, alu.DstReg, want.dst)
+		}
+		if alu.SrcReg == nil || alu.SrcReg.Value != want.src {
+			t.Errorf("stmt[%d] src = %v, want %s", i, alu.SrcReg, want.src)
+		}
+	}
+}
+
+// TestParseProgram_ALUInOnChatBlock tests that ALU instructions work inside ON_CHAT bodies.
+func TestParseProgram_ALUInOnChatBlock(t *testing.T) {
+	input := `ON_CHAT "!calc", R1
+    ADD R1, R2
+    SHL R1, R3
+    SEND_CHAT R1
+FREE R1
+`
+	p := New(lexer.New(input))
+	prog := p.ParseProgram()
+
+	if errs := p.Errors(); len(errs) > 0 {
+		t.Fatalf("parser reported errors: %v", errs)
+	}
+	if len(prog.Statements) != 2 {
+		t.Fatalf("expected 2 top-level statements, got %d (%s)", len(prog.Statements), prog.Dump())
+	}
+
+	oc, ok := prog.Statements[0].(*ast.OnChatBlock)
+	if !ok {
+		t.Fatalf("stmt[0] is not *ast.OnChatBlock: %T", prog.Statements[0])
+	}
+	if len(oc.Body) != 3 {
+		t.Fatalf("ON_CHAT body len = %d, want 3", len(oc.Body))
+	}
+	if _, ok := oc.Body[0].(*ast.ALUStmt); !ok {
+		t.Errorf("body[0] should be *ast.ALUStmt, got %T", oc.Body[0])
+	}
+	if _, ok := oc.Body[1].(*ast.ALUStmt); !ok {
+		t.Errorf("body[1] should be *ast.ALUStmt, got %T", oc.Body[1])
+	}
+}
+
+// TestParseProgram_ALUSyntaxErrors tests diagnostic generation on bad operands.
+func TestParseProgram_ALUSyntaxErrors(t *testing.T) {
+	tests := []struct {
+		input string
+	}{
+		{"ADD R1"},
+		{"ADD 10, R2"},
+		{"ADD R1, 10"},
+		{"SUB R1 R2"},
+	}
+
+	for _, tt := range tests {
+		p := New(lexer.New(tt.input))
+		_ = p.ParseProgram()
+		if len(p.Errors()) == 0 {
+			t.Errorf("input %q should produce errors, got none", tt.input)
+		}
+	}
+}
+

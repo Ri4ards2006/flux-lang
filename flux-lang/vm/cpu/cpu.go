@@ -38,6 +38,15 @@ const (
 	OP_TRIGGER_PIN byte = 0x06
 	OP_SEND_CHAT   byte = 0x07
 	OP_ON_CHAT     byte = 0x08
+	OP_ADD         byte = 0x09
+	OP_SUB         byte = 0x0A
+	OP_MUL         byte = 0x0B
+	OP_DIV         byte = 0x0C
+	OP_AND         byte = 0x0D
+	OP_OR          byte = 0x0E
+	OP_XOR         byte = 0x0F
+	OP_SHL         byte = 0x10
+	OP_SHR         byte = 0x11
 )
 
 // .flx wire-format constants.
@@ -168,6 +177,24 @@ func (c *CPU) dispatchOne() error {
 		return nil
 	case OP_ON_CHAT:
 		return c.opOnChat()
+	case OP_ADD:
+		return c.opAdd()
+	case OP_SUB:
+		return c.opSub()
+	case OP_MUL:
+		return c.opMul()
+	case OP_DIV:
+		return c.opDiv()
+	case OP_AND:
+		return c.opAnd()
+	case OP_OR:
+		return c.opOr()
+	case OP_XOR:
+		return c.opXor()
+	case OP_SHL:
+		return c.opShl()
+	case OP_SHR:
+		return c.opShr()
 	default:
 		return fmt.Errorf("pc=%d: unknown opcode 0x%02x", c.PC, op)
 	}
@@ -320,6 +347,118 @@ func (c *CPU) opOnChat() error {
 		c.Constants[triggerIdx], userVar, bodyOffset, bodyOffset+bodyLength)
 
 	c.PC += 14 + bodyLength
+	return nil
+}
+
+func (c *CPU) opAdd() error {
+	if c.PC+3 > uint32(len(c.Bytecode)) {
+		return errors.New("ADD truncated")
+	}
+	dst := registerCode(c.Bytecode[c.PC+1])
+	src := registerCode(c.Bytecode[c.PC+2])
+	c.Registers[dst] = c.Registers[dst] + c.Registers[src]
+	c.PC += 3
+	return nil
+}
+
+func (c *CPU) opSub() error {
+	if c.PC+3 > uint32(len(c.Bytecode)) {
+		return errors.New("SUB truncated")
+	}
+	dst := registerCode(c.Bytecode[c.PC+1])
+	src := registerCode(c.Bytecode[c.PC+2])
+	c.Registers[dst] = c.Registers[dst] - c.Registers[src]
+	c.PC += 3
+	return nil
+}
+
+func (c *CPU) opMul() error {
+	if c.PC+3 > uint32(len(c.Bytecode)) {
+		return errors.New("MUL truncated")
+	}
+	dst := registerCode(c.Bytecode[c.PC+1])
+	src := registerCode(c.Bytecode[c.PC+2])
+	c.Registers[dst] = c.Registers[dst] * c.Registers[src]
+	c.PC += 3
+	return nil
+}
+
+func (c *CPU) opDiv() error {
+	if c.PC+3 > uint32(len(c.Bytecode)) {
+		return errors.New("DIV truncated")
+	}
+	dst := registerCode(c.Bytecode[c.PC+1])
+	src := registerCode(c.Bytecode[c.PC+2])
+	if c.Registers[src] == 0 {
+		return errors.New("DIV: division by zero")
+	}
+	c.Registers[dst] = c.Registers[dst] / c.Registers[src]
+	c.PC += 3
+	return nil
+}
+
+func (c *CPU) opAnd() error {
+	if c.PC+3 > uint32(len(c.Bytecode)) {
+		return errors.New("AND truncated")
+	}
+	dst := registerCode(c.Bytecode[c.PC+1])
+	src := registerCode(c.Bytecode[c.PC+2])
+	c.Registers[dst] = c.Registers[dst] & c.Registers[src]
+	c.PC += 3
+	return nil
+}
+
+func (c *CPU) opOr() error {
+	if c.PC+3 > uint32(len(c.Bytecode)) {
+		return errors.New("OR truncated")
+	}
+	dst := registerCode(c.Bytecode[c.PC+1])
+	src := registerCode(c.Bytecode[c.PC+2])
+	c.Registers[dst] = c.Registers[dst] | c.Registers[src]
+	c.PC += 3
+	return nil
+}
+
+func (c *CPU) opXor() error {
+	if c.PC+3 > uint32(len(c.Bytecode)) {
+		return errors.New("XOR truncated")
+	}
+	dst := registerCode(c.Bytecode[c.PC+1])
+	src := registerCode(c.Bytecode[c.PC+2])
+	c.Registers[dst] = c.Registers[dst] ^ c.Registers[src]
+	c.PC += 3
+	return nil
+}
+
+func (c *CPU) opShl() error {
+	if c.PC+3 > uint32(len(c.Bytecode)) {
+		return errors.New("SHL truncated")
+	}
+	dst := registerCode(c.Bytecode[c.PC+1])
+	src := registerCode(c.Bytecode[c.PC+2])
+	shift := c.Registers[src]
+	if shift >= 32 {
+		c.Registers[dst] = 0
+	} else {
+		c.Registers[dst] = c.Registers[dst] << shift
+	}
+	c.PC += 3
+	return nil
+}
+
+func (c *CPU) opShr() error {
+	if c.PC+3 > uint32(len(c.Bytecode)) {
+		return errors.New("SHR truncated")
+	}
+	dst := registerCode(c.Bytecode[c.PC+1])
+	src := registerCode(c.Bytecode[c.PC+2])
+	shift := c.Registers[src]
+	if shift >= 32 {
+		c.Registers[dst] = 0
+	} else {
+		c.Registers[dst] = c.Registers[dst] >> shift
+	}
+	c.PC += 3
 	return nil
 }
 

@@ -10,6 +10,9 @@ Goal: Transform flux-lang from a linear event-trigger DSL into a Turing-complete
 - [ ] **Arithmetic & Logic Unit (ALU)**
   - [ ] Implement `OP_ADD`, `OP_SUB`, `OP_MUL`, `OP_DIV`
   - [ ] Implement bitwise instructions: `OP_AND`, `OP_OR`, `OP_XOR`, `OP_SHL`, `OP_SHR`
+- [x] **Arithmetic & Logic Unit (ALU)**
+  - [x] Implement `OP_ADD`, `OP_SUB`, `OP_MUL`, `OP_DIV`
+  - [x] Implement bitwise instructions: `OP_AND`, `OP_OR`, `OP_XOR`, `OP_SHL`, `OP_SHR`
 - [ ] **Control Flow & Branching**
   - [ ] Implement conditional and unconditional jumps: `OP_JMP`, `OP_JZ`, `OP_JNZ`, `OP_CMP`
   - [ ] Add AST/Parser support for `IF/ELSE` and `WHILE/LOOP` constructs

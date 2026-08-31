@@ -169,3 +169,58 @@ func TestNegativeNumberRejected(t *testing.T) {
 		t.Fatalf("expected ILLEGAL literal to be \"-\", got %q", tok.Literal)
 	}
 }
+
+// TestAllALUKeywordsCovered checks that all 9 ALU keywords are tokenized
+// with the correct TokenType and literal values.
+func TestAllALUKeywordsCovered(t *testing.T) {
+	input := "ADD SUB MUL DIV AND OR XOR SHL SHR"
+	expected := []struct {
+		typ TokenType
+		lit string
+	}{
+		{TOKEN_ADD, "ADD"},
+		{TOKEN_SUB, "SUB"},
+		{TOKEN_MUL, "MUL"},
+		{TOKEN_DIV, "DIV"},
+		{TOKEN_AND, "AND"},
+		{TOKEN_OR, "OR"},
+		{TOKEN_XOR, "XOR"},
+		{TOKEN_SHL, "SHL"},
+		{TOKEN_SHR, "SHR"},
+	}
+
+	l := New(input)
+	for i, want := range expected {
+		tok := l.NextToken()
+		if tok.Type != want.typ {
+			t.Fatalf("ALU[%d] type mismatch: expected=%q got=%q (literal=%q)",
+				i, want.typ, tok.Type, tok.Literal)
+		}
+		if tok.Literal != want.lit {
+			t.Fatalf("ALU[%d] literal mismatch: expected=%q got=%q (type=%q)",
+				i, want.lit, tok.Literal, tok.Type)
+		}
+	}
+	if (l.NextToken()).Type != TOKEN_EOF {
+		t.Fatalf("expected EOF after SHR")
+	}
+}
+
+// TestALUInstructionTokenization tests full statement token streams for ALU ops.
+func TestALUInstructionTokenization(t *testing.T) {
+	input := "ADD R1, R2\nSUB R3, R4\n"
+	expected := []TokenType{
+		TOKEN_ADD, TOKEN_R1, TOKEN_COMMA, TOKEN_R2,
+		TOKEN_SUB, TOKEN_R3, TOKEN_COMMA, TOKEN_R4,
+		TOKEN_EOF,
+	}
+
+	l := New(input)
+	for i, wantType := range expected {
+		tok := l.NextToken()
+		if tok.Type != wantType {
+			t.Fatalf("step %d: got type %q, want %q", i, tok.Type, wantType)
+		}
+	}
+}
+

@@ -63,6 +63,42 @@ const (
 	// linear top-down execution skips over the block. When the event
 	// fires the VM jumps to [OffsetToBodyStart].
 	OP_ON_CHAT byte = 0x08
+
+	// OP_ADD: DestReg <- DestReg + SrcReg (uint32 wrapping addition)
+	//   Layout: [OP_ADD] [DestReg:1] [SrcReg:1]
+	OP_ADD byte = 0x09
+
+	// OP_SUB: DestReg <- DestReg - SrcReg (uint32 wrapping subtraction)
+	//   Layout: [OP_SUB] [DestReg:1] [SrcReg:1]
+	OP_SUB byte = 0x0A
+
+	// OP_MUL: DestReg <- DestReg * SrcReg (uint32 wrapping multiplication)
+	//   Layout: [OP_MUL] [DestReg:1] [SrcReg:1]
+	OP_MUL byte = 0x0B
+
+	// OP_DIV: DestReg <- DestReg / SrcReg (uint32 division; error if SrcReg == 0)
+	//   Layout: [OP_DIV] [DestReg:1] [SrcReg:1]
+	OP_DIV byte = 0x0C
+
+	// OP_AND: DestReg <- DestReg & SrcReg (bitwise AND)
+	//   Layout: [OP_AND] [DestReg:1] [SrcReg:1]
+	OP_AND byte = 0x0D
+
+	// OP_OR: DestReg <- DestReg | SrcReg (bitwise OR)
+	//   Layout: [OP_OR] [DestReg:1] [SrcReg:1]
+	OP_OR byte = 0x0E
+
+	// OP_XOR: DestReg <- DestReg ^ SrcReg (bitwise XOR)
+	//   Layout: [OP_XOR] [DestReg:1] [SrcReg:1]
+	OP_XOR byte = 0x0F
+
+	// OP_SHL: DestReg <- DestReg << SrcReg (logical shift left; yields 0 if SrcReg >= 32)
+	//   Layout: [OP_SHL] [DestReg:1] [SrcReg:1]
+	OP_SHL byte = 0x10
+
+	// OP_SHR: DestReg <- DestReg >> SrcReg (logical shift right; yields 0 if SrcReg >= 32)
+	//   Layout: [OP_SHR] [DestReg:1] [SrcReg:1]
+	OP_SHR byte = 0x11
 )
 
 // ---------------------------------------------------------------------------
