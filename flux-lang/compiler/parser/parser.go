@@ -199,6 +199,14 @@ func (p *Parser) parseStatement() ast.Statement {
 		if s := p.parseJumpStmt(); s != nil {
 			return s
 		}
+	case lexer.TOKEN_CALL:
+		if s := p.parseCallStmt(); s != nil {
+			return s
+		}
+	case lexer.TOKEN_RET:
+		if s := p.parseRetStmt(); s != nil {
+			return s
+		}
 	case lexer.TOKEN_IDENT:
 		if p.peekToken.Type == lexer.TOKEN_COLON {
 			if s := p.parseLabelStmt(); s != nil {
@@ -447,6 +455,21 @@ func (p *Parser) parseLabelStmt() *ast.LabelStmt {
 	// curToken is the IDENT; advance past the COLON
 	p.nextToken()
 	return stmt
+}
+
+// parseCallStmt: CALL <label>
+func (p *Parser) parseCallStmt() *ast.CallStmt {
+	stmt := &ast.CallStmt{Token: p.curToken}
+	if !p.expectPeek(lexer.TOKEN_IDENT) {
+		return nil
+	}
+	stmt.Label = p.curToken.Literal
+	return stmt
+}
+
+// parseRetStmt: RET
+func (p *Parser) parseRetStmt() *ast.RetStmt {
+	return &ast.RetStmt{Token: p.curToken}
 }
 
 // ---------------------------------------------------------------------------

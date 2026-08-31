@@ -232,3 +232,36 @@ FREE R1
 	}
 }
 
+// TestRun_OutFlag_SubroutineProgram verifies that programs with CALL/RET compile cleanly via CLI.
+func TestRun_OutFlag_SubroutineProgram(t *testing.T) {
+	const progFixture = `main:
+  MOV R1, 5
+  CALL double_sub
+  JMP exit
+double_sub:
+  ADD R1, R1
+  RET
+exit:
+`
+	dir := t.TempDir()
+	outPath := filepath.Join(dir, "sub.flx")
+
+	stdout, stderr := &strings.Builder{}, &strings.Builder{}
+	if err := run([]string{"-o", outPath}, strings.NewReader(progFixture), stdout, stderr); err != nil {
+		t.Fatalf("unexpected error compiling subroutine fixture: %v (stderr=%q)", err, stderr.String())
+	}
+
+	data, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("read -o output: %v", err)
+	}
+
+	if len(data) < 15 {
+		t.Fatalf("output file too small: %d bytes", len(data))
+	}
+	if string(data[0:4]) != "FLUX" {
+		t.Errorf("Magic mismatch: got %q, want %q", data[0:4], "FLUX")
+	}
+}
+
+

@@ -124,6 +124,14 @@ func writeStatement(b *strings.Builder, s Statement, indent string) {
 	case *JumpStmt:
 		fmt.Fprintf(b, "%sJumpStmt { op=%s, label=%s }\n",
 			indent, v.Op, v.Label)
+
+	case *CallStmt:
+		fmt.Fprintf(b, "%sCallStmt { label=%s }\n",
+			indent, v.Label)
+
+	case *RetStmt:
+		fmt.Fprintf(b, "%sRetStmt {}\n",
+			indent)
 	}
 }
 
@@ -259,6 +267,23 @@ type JumpStmt struct {
 
 func (s *JumpStmt) statementNode()       {}
 func (s *JumpStmt) TokenLiteral() string { return s.Token.Literal }
+
+// CallStmt models `CALL <label>`.
+type CallStmt struct {
+	Token lexer.Token
+	Label string
+}
+
+func (s *CallStmt) statementNode()       {}
+func (s *CallStmt) TokenLiteral() string { return s.Token.Literal }
+
+// RetStmt models `RET`.
+type RetStmt struct {
+	Token lexer.Token
+}
+
+func (s *RetStmt) statementNode()       {}
+func (s *RetStmt) TokenLiteral() string { return s.Token.Literal }
 
 // ----------------------------------------------------------------------------
 // Operand / Expression nodes

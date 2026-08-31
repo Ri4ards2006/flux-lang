@@ -166,6 +166,10 @@ func (c *Compiler) Compile(node ast.Node) error {
 		return c.emitCmp(n)
 	case *ast.JumpStmt:
 		return c.emitJump(n)
+	case *ast.CallStmt:
+		return c.emitCall(n)
+	case *ast.RetStmt:
+		return c.emitRet(n)
 
 	default:
 		return fmt.Errorf("codegen: unsupported AST node %T", node)
@@ -413,6 +417,26 @@ func (c *Compiler) emitJump(s *ast.JumpStmt) error {
 		label:     s.Label,
 		tokenType: s.Op,
 	})
+	return nil
+}
+
+// emitCall: CALL <label> → [OP_CALL] [TargetPC:Uint32 BE (placeholder)]
+func (c *Compiler) emitCall(s *ast.CallStmt) error {
+	c.bytecode = append(c.bytecode, OP_CALL)
+	fixupOffset := len(c.bytecode)
+	c.bytecode = binary.BigEndian.AppendUint32(c.bytecode, 0) // placeholder
+
+	c.jumpFixups = append(c.jumpFixups, jumpFixup{
+		offset:    fixupOffset,
+		label:     s.Label,
+		tokenType: lexer.TOKEN_CALL,
+	})
+	return nil
+}
+
+// emitRet: RET → [OP_RET]
+func (c *Compiler) emitRet(s *ast.RetStmt) error {
+	c.bytecode = append(c.bytecode, OP_RET)
 	return nil
 }
 

@@ -594,3 +594,253 @@ func TestRun_JmpOutOfBounds(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Phase 1 (Subroutines & Call Stack) tests
+// ---------------------------------------------------------------------------
+
+func TestRun_SubroutineCallAndReturn(t *testing.T) {
+	memory.Reset()
+
+	// Main:
+	// 0..6:   R1 = 20
+	// 6..11:  CALL double_func (offset 17)
+	// 11..17: R2 = 100 (after return)
+	// Subroutine double_func (offset 17):
+	// 17..20: ADD R1, R1 (R1 becomes 40)
+	// 20..21: RET
+	code := []byte{
+		OP_MOV_REG_INT, 0x01, 0x00, 0x00, 0x00, 0x14, // 0..6 (R1 = 20)
+		OP_CALL, 0x00, 0x00, 0x00, 0x11,              // 6..11 (CALL offset 17)
+		OP_MOV_REG_INT, 0x02, 0x00, 0x00, 0x00, 0x64, // 11..17 (R2 = 100)
+		OP_JMP, 0x00, 0x00, 0x00, 0x15,               // 17..22 (skip func body on linear exit, or we can place func at end)
+	}
+	// Let's lay it out cleanly:
+	// 0..6:   MOV R1, 20
+	// 6..11:  CALL 17
+	// 11..17: JMP 21 (exit)
+	// 17..20: ADD R1, R1
+	// 20..21: RET
+	codeClean := []byte{
+		OP_MOV_REG_INT, 0x01, 0x00, 0x00, 0x00, 0x14, // 0..6 (R1 = 20)
+		OP_CALL, 0x00, 0x00, 0x00, 0x10,              // 6..11 (CALL offset 16)
+		OP_MOV_REG_INT, 0x02, 0x00, 0x00, 0x00, 0x64, // 11..17 (R2 = 100)
+		OP_JMP, 0x00, 0x00, 0x00, 0x15,               // 17..22 (JMP to 21 EOF)
+		// offset 16 (0x10): double_func
+		OP_ADD, 0x01, 0x01,                           // 16..19 (R1 += R1 -> 40)
+		OP_RET,                                       // 19..20 (RET)
+	}
+
+	// Wait, let's calculate exact offsets for codeClean:
+	// 0..6:   MOV R1, 20 (6 bytes)
+	// 6..11:  CALL 17 (5 bytes)
+	// 11..17: MOV R2, 100 (6 bytes)
+	// 17..22: JMP 26 (5 bytes)
+	// 22..25: ADD R1, R1 (3 bytes)
+	// 25..26: RET (1 byte)
+	exactCode := []byte{
+		OP_MOV_REG_INT, 0x01, 0x00, 0x00, 0x00, 0x14, // 0..6: R1 = 20
+		OP_CALL, 0x00, 0x00, 0x00, 0x16,              // 6..11: CALL offset 22
+		OP_MOV_REG_INT, 0x02, 0x00, 0x00, 0x00, 0x64, // 11..17: R2 = 100
+		OP_JMP, 0x00, 0x00, 0x00, 0x1A,               // 17..22: JMP offset 26 (EOF)
+		// double_func at offset 22:
+		OP_ADD, 0x01, 0x01,                           // 22..25: ADD R1, R1
+		OP_RET,                                       // 25..26: RET
+	}
+
+	c := New()
+	if err := c.LoadBinary(encodeFLX(t, nil, exactCode)); err != nil {
+		t.Fatalf("LoadBinary: %v", err)
+	}
+	if err := c.Run(); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if c.Registers[0] != 40 {
+		t.Errorf("Subroutine R1 = %d, want 40", c.Registers[0])
+	}
+	if c.Registers[1] != 100 {
+		t.Errorf("Post-return R2 = %d, want 100", c.Registers[1])
+	}
+	if len(c.CallStack) != 0 {
+		t.Errorf("CallStack should be empty after returns, got %d items", len(c.CallStack))
+	}
+}
+
+func TestRun_NestedSubroutines(t *testing.T) {
+	memory.Reset()
+
+	// Main:
+	// 0..6:   MOV R1, 10
+	// 6..11:  CALL funcA (offset 16)
+	// 11..16: JMP end (offset 29)
+	// funcA (offset 16):
+	// 16..19: ADD R1, R1 (R1 = 20)
+	// 19..24: CALL funcB (offset 25)
+	// 24..25: RET
+	// funcB (offset 25):
+	// 25..28: ADD R1, R1 (R1 = 40)
+	// 28..29: RET
+	// end (offset 29)
+	code := []byte{
+		// Main
+		OP_MOV_REG_INT, 0x01, 0x00, 0x00, 0x00, 0x0A, // 0..6: R1 = 10
+		OP_CALL, 0x00, 0x00, 0x00, 0x10,              // 6..11: CALL 16 (funcA)
+		OP_JMP, 0x00, 0x00, 0x00, 0x1D,               // 11..16: JMP 29 (exit)
+
+		// funcA (offset 16)
+		OP_ADD, 0x01, 0x01,                           // 16..19: R1 += R1 (20)
+		OP_CALL, 0x00, 0x00, 0x00, 0x19,              // 19..24: CALL 25 (funcB)
+		OP_RET,                                       // 24..25: RET to Main
+
+		// funcB (offset 25)
+		OP_ADD, 0x01, 0x01,                           // 25..28: R1 += R1 (40)
+		OP_RET,                                       // 28..29: RET to funcA
+	}
+
+	c := New()
+	if err := c.LoadBinary(encodeFLX(t, nil, code)); err != nil {
+		t.Fatalf("LoadBinary: %v", err)
+	}
+	if err := c.Run(); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if c.Registers[0] != 40 {
+		t.Errorf("Nested subroutines R1 = %d, want 40", c.Registers[0])
+	}
+	if len(c.CallStack) != 0 {
+		t.Errorf("CallStack not empty: %v", c.CallStack)
+	}
+}
+
+func TestRun_RecursiveSubroutine(t *testing.T) {
+	memory.Reset()
+
+	// Recursive countdown accumulator:
+	// Main:
+	//   R1 = 4 (counter)
+	//   R2 = 1 (step)
+	//   R3 = 0 (base target)
+	//   R4 = 0 (sum)
+	//   CALL recurse (offset 29)
+	//   JMP end (offset 46)
+	// recurse (offset 29):
+	//   ADD R4, R1        (offset 29..32)
+	//   SUB R1, R2        (offset 32..35)
+	//   CMP R1, R3        (offset 35..38)
+	//   JZ done           (offset 38..43) -> target 45
+	//   CALL recurse      (offset 43..48) -> target 29
+	// done (offset 48):
+	//   RET               (offset 48..49)
+	// end (offset 49)
+	code := []byte{
+		// Main (0..29)
+		OP_MOV_REG_INT, 0x01, 0x00, 0x00, 0x00, 0x04, // 0..6: R1 = 4
+		OP_MOV_REG_INT, 0x02, 0x00, 0x00, 0x00, 0x01, // 6..12: R2 = 1
+		OP_MOV_REG_INT, 0x03, 0x00, 0x00, 0x00, 0x00, // 12..18: R3 = 0
+		OP_MOV_REG_INT, 0x04, 0x00, 0x00, 0x00, 0x00, // 18..24: R4 = 0
+		OP_CALL, 0x00, 0x00, 0x00, 0x1D,              // 24..29: CALL 29 (recurse)
+		OP_JMP, 0x00, 0x00, 0x00, 0x31,               // 29..34: JMP 49 (end)
+
+		// recurse (offset 34):
+		OP_ADD, 0x04, 0x01,                           // 34..37: R4 += R1
+		OP_SUB, 0x01, 0x02,                           // 37..40: R1 -= 1
+		OP_CMP, 0x01, 0x03,                           // 40..43: CMP R1, 0
+		OP_JZ, 0x00, 0x00, 0x00, 0x30,                // 43..48: JZ 48 (done)
+		OP_CALL, 0x00, 0x00, 0x00, 0x22,              // 48..53: CALL 34 (recurse)
+		// done (offset 53):
+		OP_RET,                                       // 53..54: RET
+	}
+
+	// Correct offset adjustments:
+	// Main:
+	// 0..6:   MOV R1, 4
+	// 6..12:  MOV R2, 1
+	// 12..18: MOV R3, 0
+	// 18..24: MOV R4, 0
+	// 24..29: CALL 34 (offset 34)
+	// 29..34: JMP 54 (offset 54)
+	// recurse (34):
+	// 34..37: ADD R4, R1
+	// 37..40: SUB R1, R2
+	// 40..43: CMP R1, R3
+	// 43..48: JZ 53 (offset 53)
+	// 48..53: CALL 34 (offset 34)
+	// done (53):
+	// 53..54: RET
+	// end (54)
+	exactCode := []byte{
+		OP_MOV_REG_INT, 0x01, 0x00, 0x00, 0x00, 0x04,
+		OP_MOV_REG_INT, 0x02, 0x00, 0x00, 0x00, 0x01,
+		OP_MOV_REG_INT, 0x03, 0x00, 0x00, 0x00, 0x00,
+		OP_MOV_REG_INT, 0x04, 0x00, 0x00, 0x00, 0x00,
+		OP_CALL, 0x00, 0x00, 0x00, 0x22,
+		OP_JMP, 0x00, 0x00, 0x00, 0x36,
+		// recurse (offset 34 = 0x22)
+		OP_ADD, 0x04, 0x01,
+		OP_SUB, 0x01, 0x02,
+		OP_CMP, 0x01, 0x03,
+		OP_JZ, 0x00, 0x00, 0x00, 0x35, // JZ 53
+		OP_CALL, 0x00, 0x00, 0x00, 0x22, // CALL 34
+		// done (offset 53 = 0x35)
+		OP_RET,
+	}
+
+	c := New()
+	if err := c.LoadBinary(encodeFLX(t, nil, exactCode)); err != nil {
+		t.Fatalf("LoadBinary: %v", err)
+	}
+	if err := c.Run(); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	// 4 + 3 + 2 + 1 = 10
+	if c.Registers[3] != 10 {
+		t.Errorf("Recursive countdown sum in R4 = %d, want 10", c.Registers[3])
+	}
+	if len(c.CallStack) != 0 {
+		t.Errorf("CallStack not empty: %v", c.CallStack)
+	}
+}
+
+func TestRun_StackUnderflow(t *testing.T) {
+	memory.Reset()
+
+	code := []byte{
+		OP_RET, // RET with empty stack
+	}
+	c := New()
+	if err := c.LoadBinary(encodeFLX(t, nil, code)); err != nil {
+		t.Fatalf("LoadBinary: %v", err)
+	}
+	err := c.Run()
+	if err == nil {
+		t.Fatalf("expected stack underflow error, got nil")
+	}
+	if !strings.Contains(err.Error(), "underflow") {
+		t.Errorf("error = %q, want 'underflow'", err.Error())
+	}
+}
+
+func TestRun_StackOverflow(t *testing.T) {
+	memory.Reset()
+
+	// Infinite recursion without base case
+	// 0..5: CALL 0
+	code := []byte{
+		OP_CALL, 0x00, 0x00, 0x00, 0x00,
+	}
+	c := New()
+	if err := c.LoadBinary(encodeFLX(t, nil, code)); err != nil {
+		t.Fatalf("LoadBinary: %v", err)
+	}
+	err := c.Run()
+	if err == nil {
+		t.Fatalf("expected stack overflow error, got nil")
+	}
+	if !strings.Contains(err.Error(), "overflow") {
+		t.Errorf("error = %q, want 'overflow'", err.Error())
+	}
+}
+
+

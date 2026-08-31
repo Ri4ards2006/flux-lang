@@ -115,6 +115,14 @@ const (
 	// OP_JNZ: jump to TargetPC if ZeroFlag is false
 	//   Layout: [OP_JNZ] [TargetPC:Uint32]
 	OP_JNZ byte = 0x15
+
+	// OP_CALL: push return address (PC+5) to CallStack and jump to TargetPC
+	//   Layout: [OP_CALL] [TargetPC:Uint32]
+	OP_CALL byte = 0x16
+
+	// OP_RET: pop return address from CallStack and set PC
+	//   Layout: [OP_RET]
+	OP_RET byte = 0x17
 )
 
 // ---------------------------------------------------------------------------

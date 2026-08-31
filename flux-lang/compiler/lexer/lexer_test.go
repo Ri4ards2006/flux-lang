@@ -268,3 +268,31 @@ func TestLabelTokenization(t *testing.T) {
 	}
 }
 
+// TestSubroutineKeywordsTokenization tests CALL and RET keywords.
+func TestSubroutineKeywordsTokenization(t *testing.T) {
+	input := "CALL my_sub\nRET\n"
+	expected := []struct {
+		typ TokenType
+		lit string
+	}{
+		{TOKEN_CALL, "CALL"},
+		{TOKEN_IDENT, "my_sub"},
+		{TOKEN_RET, "RET"},
+		{TOKEN_EOF, ""},
+	}
+
+	l := New(input)
+	for i, want := range expected {
+		tok := l.NextToken()
+		if tok.Type != want.typ {
+			t.Fatalf("step %d: type mismatch: expected=%q got=%q (literal=%q)",
+				i, want.typ, tok.Type, tok.Literal)
+		}
+		if want.lit != "" && tok.Literal != want.lit {
+			t.Fatalf("step %d: literal mismatch: expected=%q got=%q",
+				i, want.lit, tok.Literal)
+		}
+	}
+}
+
+

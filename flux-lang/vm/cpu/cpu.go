@@ -51,14 +51,19 @@ const (
 	OP_JMP         byte = 0x13
 	OP_JZ          byte = 0x14
 	OP_JNZ         byte = 0x15
+	OP_CALL        byte = 0x16
+	OP_RET         byte = 0x17
 )
 
 // .flx wire-format constants.
 const (
-	FlxMagic     = "FLUX"
+	FlxMagic          = "FLUX"
 	FlxVersion   byte = 1
 	FlxHeaderSize     = 4 + 1 + 2 + 4 + 4 // 15
 )
+
+// MaxCallStackDepth is the maximum nesting depth for subroutines before stack overflow.
+const MaxCallStackDepth = 1024
 
 // EventSubscription holds one ON_CHAT registration. BodyOffset and
 // BodyLength are absolute offsets into c.Bytecode.
@@ -79,6 +84,7 @@ type CPU struct {
 	Logs                []string
 	ZeroFlag            bool
 	SignFlag            bool
+	CallStack           []uint32
 }
 
 // New returns a CPU ready to LoadBinary.
@@ -209,6 +215,10 @@ func (c *CPU) dispatchOne() error {
 		return c.opJz()
 	case OP_JNZ:
 		return c.opJnz()
+	case OP_CALL:
+		return c.opCall()
+	case OP_RET:
+		return c.opRet()
 	default:
 		return fmt.Errorf("pc=%d: unknown opcode 0x%02x", c.PC, op)
 	}
@@ -531,6 +541,36 @@ func (c *CPU) opJnz() error {
 	} else {
 		c.PC += 5
 	}
+	return nil
+}
+
+func (c *CPU) opCall() error {
+	if c.PC+5 > uint32(len(c.Bytecode)) {
+		return errors.New("CALL truncated")
+	}
+	target := binary.BigEndian.Uint32(c.Bytecode[c.PC+1 : c.PC+5])
+	if target > uint32(len(c.Bytecode)) {
+		return fmt.Errorf("CALL: target %d out of bounds (code size %d)", target, len(c.Bytecode))
+	}
+	if len(c.CallStack) >= MaxCallStackDepth {
+		return errors.New("CALL: stack overflow")
+	}
+	returnPC := c.PC + 5
+	c.CallStack = append(c.CallStack, returnPC)
+	c.PC = target
+	return nil
+}
+
+func (c *CPU) opRet() error {
+	if len(c.CallStack) == 0 {
+		return errors.New("RET: stack underflow")
+	}
+	retPC := c.CallStack[len(c.CallStack)-1]
+	c.CallStack = c.CallStack[:len(c.CallStack)-1]
+	if retPC > uint32(len(c.Bytecode)) {
+		return fmt.Errorf("RET: return PC %d out of bounds (code size %d)", retPC, len(c.Bytecode))
+	}
+	c.PC = retPC
 	return nil
 }
 

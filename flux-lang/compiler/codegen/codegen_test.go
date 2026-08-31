@@ -392,3 +392,57 @@ func TestEmit_UndefinedLabelError(t *testing.T) {
 	}
 }
 
+// TestEmit_SubroutineCallAndRet verifies encoding and backpatching for CALL and RET.
+func TestEmit_SubroutineCallAndRet(t *testing.T) {
+	// Layout:
+	// 0..5:   CALL double_it (TargetPC = 10)
+	// 5..10:  JMP exit_label (TargetPC = 14)
+	// 10..13: double_it: ADD R1, R1
+	// 13..14: RET
+	// 14..:   exit_label:
+	input := `main:
+  CALL double_it
+  JMP exit_label
+double_it:
+  ADD R1, R1
+  RET
+exit_label:
+`
+	prog := parseSrc(t, input)
+	c := New()
+	if err := c.Compile(prog); err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	if errs := c.Errors(); len(errs) > 0 {
+		t.Fatalf("codegen reported errors: %v", errs)
+	}
+
+	code := c.Code()
+	wantCode := []byte{
+		// 0..5: CALL target 10 (0x0000000A)
+		OP_CALL, 0x00, 0x00, 0x00, 0x0A,
+		// 5..10: JMP target 14 (0x0000000E)
+		OP_JMP, 0x00, 0x00, 0x00, 0x0E,
+		// 10..13: ADD R1, R1
+		OP_ADD, 1, 1,
+		// 13..14: RET
+		OP_RET,
+	}
+
+	if !bytes.Equal(code, wantCode) {
+		t.Fatalf("Subroutine bytecode mismatch:\n got:  %x\n want: %x", code, wantCode)
+	}
+}
+
+// TestEmit_UndefinedSubroutineLabel ensures CALL to an undefined label reports an error.
+func TestEmit_UndefinedSubroutineLabel(t *testing.T) {
+	input := `CALL missing_function`
+	prog := parseSrc(t, input)
+	c := New()
+	_ = c.Compile(prog)
+	if len(c.Errors()) == 0 {
+		t.Fatalf("expected undefined subroutine label error, got none")
+	}
+}
+
+

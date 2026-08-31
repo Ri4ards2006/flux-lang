@@ -50,10 +50,12 @@ const (
 	TOKEN_SHR TokenType = "SHR"
 
 	// Control flow & branching keywords.
-	TOKEN_CMP TokenType = "CMP"
-	TOKEN_JMP TokenType = "JMP"
-	TOKEN_JZ  TokenType = "JZ"
-	TOKEN_JNZ TokenType = "JNZ"
+	TOKEN_CMP  TokenType = "CMP"
+	TOKEN_JMP  TokenType = "JMP"
+	TOKEN_JZ   TokenType = "JZ"
+	TOKEN_JNZ  TokenType = "JNZ"
+	TOKEN_CALL TokenType = "CALL"
+	TOKEN_RET  TokenType = "RET"
 
 	// Registers R1..R16. Declared explicitly so the test fixture can name
 	// each one without resorting to string-typed assertions.
@@ -131,6 +133,8 @@ var keywords = map[string]TokenType{
 	"JMP":         TOKEN_JMP,
 	"JZ":          TOKEN_JZ,
 	"JNZ":         TOKEN_JNZ,
+	"CALL":        TOKEN_CALL,
+	"RET":         TOKEN_RET,
 }
 
 // registerTokens is the single source of truth for every register name the

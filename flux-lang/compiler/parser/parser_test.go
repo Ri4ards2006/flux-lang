@@ -488,6 +488,37 @@ FREE R1
 	}
 }
 
+// TestParseProgram_SubroutineStatements tests parsing of CALL and RET statements.
+func TestParseProgram_SubroutineStatements(t *testing.T) {
+	input := `main:
+  CALL my_subroutine
+  JMP exit
+my_subroutine:
+  ADD R1, R2
+  RET
+exit:
+`
+	p := New(lexer.New(input))
+	prog := p.ParseProgram()
+
+	if errs := p.Errors(); len(errs) > 0 {
+		t.Fatalf("parser reported errors: %v", errs)
+	}
+	if len(prog.Statements) != 6 {
+		t.Fatalf("expected 6 statements, got %d (%s)", len(prog.Statements), prog.Dump())
+	}
+
+	callStmt, ok := prog.Statements[1].(*ast.CallStmt)
+	if !ok || callStmt.Label != "my_subroutine" {
+		t.Errorf("stmt[1] should be CallStmt 'my_subroutine', got %T (%+v)", prog.Statements[1], callStmt)
+	}
+
+	retStmt, ok := prog.Statements[4].(*ast.RetStmt)
+	if !ok {
+		t.Errorf("stmt[4] should be RetStmt, got %T (%+v)", prog.Statements[4], retStmt)
+	}
+}
+
 // TestParseProgram_ControlFlowSyntaxErrors tests diagnostic generation on malformed statements.
 func TestParseProgram_ControlFlowSyntaxErrors(t *testing.T) {
 	tests := []struct {
@@ -499,6 +530,8 @@ func TestParseProgram_ControlFlowSyntaxErrors(t *testing.T) {
 		{"JMP"},
 		{"JZ 42"},
 		{"JNZ R1"},
+		{"CALL"},
+		{"CALL 123"},
 		{"unknown_ident"},
 	}
 
@@ -510,4 +543,5 @@ func TestParseProgram_ControlFlowSyntaxErrors(t *testing.T) {
 		}
 	}
 }
+
 

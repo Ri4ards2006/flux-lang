@@ -227,6 +227,8 @@ When `DeliverChatMessage("Richard", "!hype")` fires, the VM:
 | 0x13   | `OP_JMP`         | 0x13 | `[OP_JMP] [TargetPC:Uint32 BE]`                                   |
 | 0x14   | `OP_JZ`          | 0x14 | `[OP_JZ]  [TargetPC:Uint32 BE]`                                   |
 | 0x15   | `OP_JNZ`         | 0x15 | `[OP_JNZ] [TargetPC:Uint32 BE]`                                   |
+| 0x16   | `OP_CALL`        | 0x16 | `[OP_CALL] [TargetPC:Uint32 BE]`                                  |
+| 0x17   | `OP_RET`         | 0x17 | `[OP_RET]`                                                        |
 
 `OP_SEND_CHAT` carries a **tagged Uint32 operand**: the high bit cleared
 denotes a register code (`1..16`) whose value the VM reads as a heap
