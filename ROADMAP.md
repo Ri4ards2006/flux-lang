@@ -7,9 +7,6 @@ This document outlines the architectural milestones and future direction of the 
 ## Phase 1: Core Language & Control Flow (Embedded Scripting)
 Goal: Transform flux-lang from a linear event-trigger DSL into a Turing-complete embedded scripting runtime.
 
-- [ ] **Arithmetic & Logic Unit (ALU)**
-  - [ ] Implement `OP_ADD`, `OP_SUB`, `OP_MUL`, `OP_DIV`
-  - [ ] Implement bitwise instructions: `OP_AND`, `OP_OR`, `OP_XOR`, `OP_SHL`, `OP_SHR`
 - [x] **Arithmetic & Logic Unit (ALU)**
   - [x] Implement `OP_ADD`, `OP_SUB`, `OP_MUL`, `OP_DIV`
   - [x] Implement bitwise instructions: `OP_AND`, `OP_OR`, `OP_XOR`, `OP_SHL`, `OP_SHR`
