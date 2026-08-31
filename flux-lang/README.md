@@ -1,353 +1,289 @@
 <div align="center">
 
+<img src="./assets/flux_banner.jpeg" alt="flux-lang Banner" width="100%" />
+
 # ⚡ flux-lang
 
-### Event-Driven System Language & Virtual Machine
+### *Deterministic Bytecode Toolchain & Virtual Execution Island*
 
-*A low-overhead, concurrent bytecode toolchain designed in pure Go to bridge real-time event telemetry streams (like Twitch IRC) with bare-metal style software loops and virtual heap management.*
-
----
-
-[![License: ISC](https://img.shields.io/badge/License-ISC-blueviolet.svg)](#license)
-[![Go: 1.22+](https://img.shields.io/badge/Go-1.22%2B-00ADD8.svg)](#tech-stack)
-[![Coverage: Pure Stdlib](https://img.shields.io/badge/Dependencies-Pure_Stdlib-success.svg)](#tech-stack)
-[![Heap Allocator: First-Fit](https://img.shields.io/badge/Heap_Allocator-First--Fit-orange.svg)](#custom-heap-manager)
+[![Language: Go 1.22+](https://img.shields.io/badge/Language-Go%201.22%2B-00ADD8?style=for-the-badge&logo=go&logoColor=white)](#-tech-stack--toolchain-pipeline)
+[![Architecture: 16-Register Bytecode VM](https://img.shields.io/badge/Architecture-16--Register%20Bytecode%20VM-informational?style=for-the-badge&color=8A2BE2)](#-architecture--isa-reference)
+[![Memory: 1 MB Static Heap | Zero-GC](https://img.shields.io/badge/Memory-1%20MB%20Static%20Heap%20%7C%20Zero--GC-orange?style=for-the-badge)](#3-custom-heap-manager-1-mb-static-ram)
+[![Dependencies: Pure Stdlib](https://img.shields.io/badge/Dependencies-Pure%20Stdlib-brightgreen?style=for-the-badge)](#-tech-stack--toolchain-pipeline)
+[![License: ISC](https://img.shields.io/badge/License-ISC-blue?style=for-the-badge)](./LICENSE)
+[![Phase 1: 100% Complete](https://img.shields.io/badge/Phase%201-100%25%20Turing--Complete-success?style=for-the-badge)](#-roadmap--milestones)
 
 </div>
 
----
+<br>
 
-## ✨ Why this exists
-
-General-purpose runtimes and high-level managed languages are tuned for
-*throughput over a wide variety of workloads*. **High-frequency event
-hooks**, however — Twitch chat bursts, GPIO interrupts, IRC floods, log
-telemetry — stress a very different muscle: **predictable latency under
-tight, repetitive bursts of small allocations**.
-
-When an event fires repeatedly inside a standard Go program, every
-`SEND_CHAT` or `TRIGGER_PIN` analogue pays the GC its share: a transient
-string here, a boxed interface there, a closure capture forcing the
-allocator to walk the heap. The larger the program, the worse the
-worst-case pause, and pauses are the thing an event loop **cannot
-tolerate**.
-
-`flux-lang` solves this by collapsing the entire pipeline into a single,
-pre-allocated execution island:
-
-- The **compiler** is a pure stdlib Go pipeline → no third-party parsing,
-  codegen, or marshaling lag.
-- The **VM** owns its own **1 MB static RAM array** and a hand-rolled
-  **first-fit allocator** → the host OS is never invoked once execution
-  has begun.
-- Event handlers are **registered up front** and run inside the same
-  flat bytecode stream they were compiled into → the body of an
-  `ON_CHAT` block runs from the same RAM you warmed up at boot.
-
-In short: `flux-lang` is what you reach for when **“just call malloc”** is
-not an acceptable answer to the question “how did the chat drop frames?”.
+| <img src="./assets/kuro_mascot.jpeg" width="220" alt="Kuro (🦫) Mascot" /><br> **Kuro 🦫**<br>*The Compiler Beaver* | **flux-lang** is a zero-dependency, deterministic systems compiler and register virtual machine constructed entirely from first principles in pure Go.<br><br>Designed to bypass runtime garbage collector pauses ($\Delta t_{\text{GC}} = 0$), **flux-lang** translates human-readable systems assembly into a compact `.flx` binary wire format and executes it within a self-managed **1 MB static RAM island** equipped with 16 general-purpose registers, condition flags, an execution call stack, and first-fit heap management. |
+| :---: | :--- |
 
 ---
 
-## 🎬 What you can do
+## 📜 The Lore & Motivation
 
-| Capability                                 | What it does                                                                                                                                                       |
-|--------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Zero-Allocation Scanning**               | Sequential byte-level **lexing** that returns substrings of the original source by index — no `string` copies, no `fmt.Sprintf` in the hot path, GC stays idle.   |
-| **Recursive Descent Parsing**              | Recursive-descent **parser** that grows an `ast.Program` tree, accumulates every diagnostic, and surfaces the partial tree even after a syntax error.                |
-| **Deterministic Bytecode Emitter**         | **Codegen** lowers the AST into a single flat `.flx` binary: 4-byte magic `FLUX`, version, deduplicated string constant pool, code section.                          |
-| **16-Register Virtual CPU**                | A `CPU` struct with `Registers [16]uint32`, `PC uint32`, an `Instruction Pointer`-driven dispatch loop, and an exact-match event subscription registry.              |
-| **Self-Managed Dynamic Heap**              | 1 MB virtual RAM (`[1024*1024]byte`) with a manual **first-fit** `Alloc`/`Free`, `ErrOOM`-on-overflow, and `ErrDoubleFree` on misuse — no host allocator.             |
-| **Interactive Chat Simulator**            | stdin-driven CLI loop parsing `<username>: <message>`, dispatching them through `DeliverChatMessage`, saving and restoring the PC around every body invocation.       |
+For many systems engineers, building an entire language toolchain from raw characters to silicon-level emulation is a defining milestone. In modern software engineering, layers of high-level abstractions, JIT compilers, runtime garbage collectors, and third-party frameworks often obscure the mechanical reality of how software actually interacts with memory and instruction decoders.
+
+**`flux-lang` was born out of a long-held engineering aspiration to deeply demystify every phase of the translation pipeline without relying on external libraries or parser generators:**
+
+1. **Zero-Allocation Lexical Scanning:** How sequential byte cursors produce strongly-typed tokens as sub-slices of a source buffer without a single heap allocation.
+2. **Recursive Descent AST Synthesis:** How grammars are transformed into deterministic abstract syntax trees while preserving error recovery and diagnostic accumulation.
+3. **Two-Pass Binary Code Generation:** How forward-jumping labels, subroutine offsets, and string constant pools are resolved and backpatched into binary bytecode.
+4. **Virtual CPU Dispatch & Call Stack:** How an instruction pointer (`PC`) loops through a flat code section, manages CPU condition flags (`ZeroFlag`, `SignFlag`), and executes nested/recursive subroutines via call stack push/pop operations.
+5. **Deterministic Static RAM Island:** How a manual First-Fit heap allocator manages dynamic memory blocks within a fixed 1 MB array with block splitting, header tracking, and double-free traps.
+
+At its fundamental core, computing is **instruction dispatch and memory bounds**. `flux-lang` is the realization of constructing an entire execution ecosystem from first principles.
+
+```text
++-----------------------------------------------------------------------------------------+
+|                                 THE FLUX PIPELINE FLOW                                  |
++-----------------------------------------------------------------------------------------+
+|  [ Source Text (.flx) ]                                                                 |
+|         │                                                                               |
+|         ▼  (Zero-Alloc Substring Slicing)                                               |
+|  [ Lexer (Token Stream) ]                                                               |
+|         │                                                                               |
+|         ▼  (Recursive Descent & Diagnostic Accumulation)                                |
+|  [ AST (ast.Program) ]                                                                  |
+|         │                                                                               |
+|         ▼  (Two-Pass Assembler & Label Backpatcher)                                     |
+|  [ Flat .flx Wire Binary ] ── [ 15-Byte Magic Header + String Pool + Code Section ]     |
+|         │                                                                               |
+|         ▼  (Byte-for-Byte Virtual CPU Loader)                                           |
+|  [ Register CPU (R1..R16) ] <════> [ 1 MB Static RAM Island (Alloc/Free/Split) ]        |
+|         │                                                                               |
+|         ▼  (CallStack & Flags: ZeroFlag, SignFlag, PC, SP)                              |
+|  [ Deterministic Execution: Loops, Subroutines, Events & Hardware Pins ]                |
++-----------------------------------------------------------------------------------------+
+```
+
+### The 4 Core Architectural Pillars
+
+* **⚡ Zero Host Allocation During Execution:** Once loaded, the VM operates exclusively inside a 1 MB static byte array (`var RAM [1024*1024]byte`). Host OS memory management is never triggered, eliminating runtime GC jitter ($\Delta t_{\text{GC}} = 0$).
+* **🧩 Clean Pipeline Decoupling:** The compiler (`flux/compiler`) and the runtime engine (`flux/vm`) are separate, independent Go modules communicating exclusively through the `.flx` binary wire specification.
+* **🛡️ Hardened Memory Invariants:** Manual memory management enforces strict safety checks: out-of-bounds pointers yield `memory: invalid address`, and duplicate frees immediately halt execution with `memory: double free`.
+* **🔌 Hardware & Multi-Valued Extensibility:** Built-in GPIO pin triggers (`OP_TRIGGER_PIN`) and event hooks (`OP_ON_CHAT`) provide a foundation for real-time telemetry and balanced-ternary integration.
+
+> [!NOTE]
+> *"Building a virtual machine from first principles teaches you that memory is not an infinite cloud, but a physical territory of indices, headers, and alignment bounds. When you manage every single byte yourself, software becomes completely deterministic."*
 
 ---
 
-## 🧱 Tech Stack
+## 🛠 Tech Stack & Toolchain Pipeline
 
-| Layer            | Implementation                                                                                    |
-|------------------|----------------------------------------------------------------------------------------------------|
-| Language         | **Go 1.22+** (no third-party dependencies whatsoever)                                             |
-| Compiler modules | `flux/compiler` → `lexer`, `parser`, `ast`, `codegen`, plus the CLI `flux-compiler`              |
-| VM modules       | `flux/vm` → `memory` (custom heap) and `cpu` (dispatch loop), plus the CLI `flux-vm`              |
-| Wire format      | Custom `.flx` binary (see *Mathematical & Architectural Invariants* below)                        |
-| Standard library | `strings`, `bytes`, `binary`, `bufio`, `encoding/binary`, `errors`, `fmt`, `io`, `os` — that's it |
+<div align="center">
+  <img src="./assets/flux_pipeline.jpeg" alt="flux-lang Toolchain Pipeline" width="100%" />
+  <br>
+  <sub><b>Figure 1:</b> Full-stack pipeline from zero-allocation source parsing to register execution and static memory management.</sub>
+</div>
 
-> [!TIP]
-> The deliberate choice to keep **everything** inside the standard
-> library is not laziness — it is a contract. There is no `gopkg.in/...`
-> digests to refresh, no transitive dependency audit to run before
-> every release, and zero marshaling friction between phases of the
-> compiler pipeline. The byte stream produced by `codegen` is the same
-> byte stream `cpu.LoadBinary` parses byte-for-byte.
+<br>
+
+`flux-lang` is constructed with **zero third-party dependencies**, utilizing only the Go standard library (`strings`, `bytes`, `encoding/binary`, `bufio`, `os`, `fmt`, `errors`).
+
+| Layer / Component | Location | Technical Implementation | Status |
+| :--- | :--- | :--- | :---: |
+| **Lexer** | `compiler/lexer` | Sequential single-pass cursor scanner; zero allocations; sub-slice token literals | ![Complete](https://img.shields.io/badge/Status-Complete-brightgreen?style=flat-square) |
+| **AST** | `compiler/ast` | Node interfaces (`Statement`, `Expression`) with tree dumping & diagnostic formatting | ![Complete](https://img.shields.io/badge/Status-Complete-brightgreen?style=flat-square) |
+| **Parser** | `compiler/parser` | Recursive-descent parser with diagnostic accumulation and block heuristic delimiters | ![Complete](https://img.shields.io/badge/Status-Complete-brightgreen?style=flat-square) |
+| **Codegen** | `compiler/codegen` | Two-pass binary assembler with string constant deduplication and label backpatching | ![Complete](https://img.shields.io/badge/Status-Complete-brightgreen?style=flat-square) |
+| **Virtual CPU** | `vm/cpu` | 16 general-purpose 32-bit registers, condition flags (`ZF`, `SF`), call stack, dispatch loop | ![Complete](https://img.shields.io/badge/Status-Complete-brightgreen?style=flat-square) |
+| **Heap Manager** | `vm/memory` | 1 MB static RAM island with first-fit traversal, 6-byte headers, block splitting & free coalesce | ![Complete](https://img.shields.io/badge/Status-Complete-brightgreen?style=flat-square) |
+| **CLI Toolchain** | `compiler/main.go`<br>`vm/main.go` | CLI utilities (`flux-compiler` and `flux-vm`) supporting standard UNIX pipelines and REPL | ![Complete](https://img.shields.io/badge/Status-Complete-brightgreen?style=flat-square) |
+
+---
+
+## 📐 Architecture & ISA Reference
+
+### 1. The `.flx` Binary Wire Format
+
+The compiled `.flx` executable consists of a fixed 15-byte header followed by the deduplicated string constant pool and the flat bytecode stream:
+
+```text
++-----------------------+---------------+-----------------------+-----------------------+-----------------------+
+|  Magic "FLUX" (4 B)   | Version (1 B) | ConstantCount (2 B BE)| CodeSectionOff (4 B)  | CodeSectionSize (4 B) |
++-----------------------+---------------+-----------------------+-----------------------+-----------------------+
+|  Constant Pool: [ Length: Uint16 BE ][ UTF-8 String Data N Bytes ] ...                                       |
++---------------------------------------------------------------------------------------------------------------+
+|  Code Section: [ Raw Instruction Bytecode Stream ... ]                                                        |
++---------------------------------------------------------------------------------------------------------------+
+```
+
+### 2. Complete Instruction Set Architecture (ISA)
+
+The virtual CPU decodes single-byte opcodes with big-endian immediate operands:
+
+| Opcode | Mnemonic | Layout | Semantics & Behavior |
+| :---: | :--- | :--- | :--- |
+| `0x01` | `OP_ALLOC` | `[0x01] [Reg:1] [Size:4 BE]` | `Registers[Reg] = Heap.Alloc(Size)` |
+| `0x02` | `OP_FREE` | `[0x02] [Reg:1]` | `Heap.Free(Registers[Reg])` |
+| `0x03` | `OP_MOV_REG_REG` | `[0x03] [Dst:1] [Src:1]` | `Registers[Dst] = Registers[Src]` |
+| `0x04` | `OP_MOV_REG_INT` | `[0x04] [Dst:1] [Val:4 BE]` | `Registers[Dst] = Val` |
+| `0x05` | `OP_MOV_REG_STR` | `[0x05] [Dst:1] [ConstIdx:4 BE]` | Copies string from pool to Heap; sets `Registers[Dst] = Ptr` |
+| `0x06` | `OP_TRIGGER_PIN` | `[0x06] [Pin:1] [State:1]` | Toggles hardware GPIO pin simulation |
+| `0x07` | `OP_SEND_CHAT` | `[0x07] [Operand:4 BE]` | High bit 31 set: Constant Index; Bit 31 clear: Register Ptr |
+| `0x08` | `OP_ON_CHAT` | `[0x08] [TrigIdx:4] [Reg:1] [Start:4] [Len:4]` | Registers event handler; skips body in linear execution |
+| `0x09` | `OP_ADD` | `[0x09] [Dst:1] [Src:1]` | `Registers[Dst] = Registers[Dst] + Registers[Src]` (wrapping uint32) |
+| `0x0A` | `OP_SUB` | `[0x0A] [Dst:1] [Src:1]` | `Registers[Dst] = Registers[Dst] - Registers[Src]` (wrapping uint32) |
+| `0x0B` | `OP_MUL` | `[0x0B] [Dst:1] [Src:1]` | `Registers[Dst] = Registers[Dst] * Registers[Src]` (wrapping uint32) |
+| `0x0C` | `OP_DIV` | `[0x0C] [Dst:1] [Src:1]` | `Registers[Dst] = Registers[Dst] / Registers[Src]` (traps on divide-by-zero) |
+| `0x0D` | `OP_AND` | `[0x0D] [Dst:1] [Src:1]` | `Registers[Dst] = Registers[Dst] & Registers[Src]` (bitwise AND) |
+| `0x0E` | `OP_OR` | `[0x0E] [Dst:1] [Src:1]` | `Registers[Dst] = Registers[Dst] \| Registers[Src]` (bitwise OR) |
+| `0x0F` | `OP_XOR` | `[0x0F] [Dst:1] [Src:1]` | `Registers[Dst] = Registers[Dst] ^ Registers[Src]` (bitwise XOR) |
+| `0x10` | `OP_SHL` | `[0x10] [Dst:1] [Src:1]` | `Registers[Dst] = Registers[Dst] << Registers[Src]` (0 if shift $\ge 32$) |
+| `0x11` | `OP_SHR` | `[0x11] [Dst:1] [Src:1]` | `Registers[Dst] = Registers[Dst] >> Registers[Src]` (0 if shift $\ge 32$) |
+| `0x12` | `OP_CMP` | `[0x12] [Reg1:1] [Reg2:1]` | Updates condition flags: `ZeroFlag = (Reg1 == Reg2)`, `SignFlag = (Reg1 < Reg2)` |
+| `0x13` | `OP_JMP` | `[0x13] [TargetPC:4 BE]` | Unconditional branch: `PC = TargetPC` |
+| `0x14` | `OP_JZ` | `[0x14] [TargetPC:4 BE]` | Branch if `ZeroFlag == true`: `PC = TargetPC` (else `PC += 5`) |
+| `0x15` | `OP_JNZ` | `[0x15] [TargetPC:4 BE]` | Branch if `ZeroFlag == false`: `PC = TargetPC` (else `PC += 5`) |
+| `0x16` | `OP_CALL` | `[0x16] [TargetPC:4 BE]` | Pushes return address (`PC + 5`) to `CallStack`, jumps to `TargetPC` |
+| `0x17` | `OP_RET` | `[0x17]` | Pops return address from `CallStack` to `PC` (traps on stack underflow) |
+
+---
+
+### 3. Custom Heap Manager (1 MB Static RAM)
+
+The virtual heap operates entirely within a contiguous 1 MB array without calling host allocation primitives:
+
+```text
++-----------------------+------------------+------------------+------------------------------------+
+|  BlockSize (4 Bytes)  | IsAlloc (1 Byte) | Padding (1 Byte) |         Data Payload (N Bytes)     |
+|   uint32 Big-Endian   | 0 = Free, 1 = Occ|  Alignment Pad   |        User Allocated Cells        |
++-----------------------+------------------+------------------+------------------------------------+
+```
+
+* **Allocation Policy:** First-Fit traversal from heap base address `0x000000`.
+* **Block Splitting:** Occurs automatically if the remainder of an unallocated block satisfies $\text{remainder} \ge 6\text{ bytes}$ (Header Size).
+* **Fault Detection:** 
+  * Unaligned address or address outside RAM boundaries returns `memory: invalid address`.
+  * Attempting to free an already unallocated block returns `memory: double free`.
+  * Heap exhaustion returns `ErrOOM` (`memory: out of memory`).
 
 ---
 
 ## 🚀 Quick Start & Practical Execution
 
-### 1. Compile a `.flx` binary from source
+### 1. Compile a Program to Bytecode
+
+You can pipe flux source code directly into the compiler CLI or compile a file to emit a `.flx` binary:
 
 ```bash
-# Navigate to the compiler component and emit the binary using pipe input.
-cd compiler
+cd flux-lang/compiler
 
-echo 'ALLOC R1, 32
-MOV R1, "Richard"
-ON_CHAT "!hype", R1
-    SEND_CHAT "Hype train activated!"
-    TRIGGER_PIN 18, 1
-FREE R1' | go run main.go -o ../vm/test.flx -
+# Compile a program utilizing subroutines, arithmetic, loops, and event hooks
+echo '
+ALLOC R1, 32
+MOV R1, "System Booted"
+SEND_CHAT R1
+FREE R1
+
+; Calculate 5! (factorial) using a subroutine
+MOV R1, 5
+CALL factorial
+JMP after_math
+
+factorial:
+  MOV R2, 1
+  MOV R3, 1
+fact_loop:
+  CMP R1, R3
+  JZ fact_done
+  MUL R2, R1
+  SUB R1, R3
+  JMP fact_loop
+fact_done:
+  MOV R1, R2
+  RET
+
+after_math:
+; Register real-time event hook
+ON_CHAT "!hype", R4
+  SEND_CHAT "Hype triggered!"
+  TRIGGER_PIN 18, 1
+' | go run main.go -o ../vm/program.flx -
 ```
 
-The compiler will report on stderr:
+### 2. Execute within the Virtual Machine
+
+```bash
+cd ../vm
+
+# Run the compiled bytecode inside the virtual execution island
+go run main.go program.flx
+```
+
+### 3. Interactive Chat Event Simulation
+
+While running `flux-vm`, trigger registered event handlers by feeding standard chat messages:
 
 ```text
-wrote "../vm/test.flx" (<N> bytes, <M> constants)
+[flux-vm] Loaded program.flx (Code size: 84 bytes, Constants: 3)
+[flux-vm] Executing bootstrap sequence...
+>>> System Booted
+[flux-vm] Factorial result in R1: 120
+[flux-vm] Listening for events. Type '<user>: <message>' or 'exit':
+
+Alice: !hype
+>>> Hype triggered!
+[flux-vm] GPIO Pin 18 set to HIGH (1)
 ```
 
-### 2. Run the binary inside the VM
+### 4. Run the Full Test Suite
+
+Execute all unit and integration test suites across both modules:
 
 ```bash
-# Navigate to the VM component and execute the compiled binary file.
-cd ../vm
-go run main.go test.flx
+# Test compiler (Lexer, Parser, AST, Codegen, CLI)
+cd flux-lang/compiler && go test ./... -v -count=1
+
+# Test virtual machine (Heap Manager, CPU, ALU, Branching, CallStack)
+cd ../vm && go test ./... -v -count=1
 ```
 
-### Interactive runtime visualisation
+---
 
-Because `MOV R1, "Richard"` registers an `ON_CHAT "!hype", R1`
-subscription, the VM does **not** exit after running the top-level
-bytecode — it enters the chat simulator. Pump a chat line in:
+## 🗺 Roadmap & Milestones
 
 ```text
-ON_CHAT subscribed pattern="!hype" user_var=R1 body=[<offset>..<offset>+<length>)
---- interactive chat simulator ---
-format: <username>: <message>
-Ctrl+D, blank line, or 'quit' to exit
-Richard: !hype
->>> ON_CHAT match pattern="!hype" username="Richard" user_var=R1 username_addr=<addr>
-SEND_CHAT "Hype train activated!"
-TRIGGER_PIN pin=18 state=1
-<<< ON_CHAT block end
-quit
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                             FLUX ROADMAP TIMELINE                                │
+├─────────────────────────┬─────────────────────────┬──────────────────────────────┤
+│ Phase 1: Turing Core    │ Phase 2: Ternary Logic  │ Phase 3: Hardware & Sockets  │
+│ [====================]  │ [····················]  │ [····················]       │
+│ Complete (100%)         │ Q3 / Q4                 │ Upcoming                     │
+└─────────────────────────┴─────────────────────────┴──────────────────────────────┘
 ```
 
-The bare `quit` line at the bottom is what closes the simulator:
-`vm/main.go` treats `quit`, `exit`, an empty line, and a `Ctrl+D` EOF
-as equivalent exit signals.
-
-> [!NOTE]
-> The transcript above is an **example**, not a literal log. The two
-> allocator-driven values — the body's byte range in the
-> `ON_CHAT subscribed` line and `username_addr` in the match line —
-> are computed at runtime and depend on the codegen's exact emission
-> plus the heap's free-block chain at the moment of each allocation.
-> `SEND_CHAT`, `TRIGGER_PIN`, and the `>>>` / `<<<` markers are
-> deterministic; the offsets are not.
+- [x] **Phase 1: Core Language & ALU (Turing-Complete Embedded Scripting)**
+  - [x] 16 general-purpose 32-bit registers (`R1`–`R16`).
+  - [x] 1 MB static RAM First-Fit heap manager (`ALLOC`, `FREE`, block splitting, double-free safety).
+  - [x] Full 9-instruction 3-byte ALU (`ADD`, `SUB`, `MUL`, `DIV`, `AND`, `OR`, `XOR`, `SHL`, `SHR`).
+  - [x] Condition flags (`ZeroFlag`, `SignFlag`) and comparison operator (`CMP`).
+  - [x] Unconditional and conditional branching (`JMP`, `JZ`, `JNZ`) with label backpatching.
+  - [x] Subroutine call stack execution (`CALL`, `RET`, `MaxCallStackDepth` recursion guards).
+- [ ] **Phase 2: Ternary Logic & Multi-Valued Architecture**
+  - [ ] Native Trit (`-1`, `0`, `+1`) and 9-trit Tryte data types.
+  - [ ] Kleene 3-valued logic gates (`AND3`, `OR3`, `NOT3`).
+  - [ ] Balanced-ternary arithmetic unit.
+- [ ] **Phase 3: Hardware Emulation & Socket Integration**
+  - [ ] Live Twitch IRC TCP socket daemon.
+  - [ ] Real-time I2C / SPI peripheral bus mock.
+  - [ ] Interrupt vector table (`IVT`) for hardware pin interrupts.
+- [ ] **Phase 4: Runtime Hardening & Tooling**
+  - [ ] Standalone Disassembler (`flux-disasm`).
+  - [ ] Bytecode optimization passes (constant folding, dead code elimination).
+  - [ ] Interactive step debugger & visual TUI memory inspector.
 
 ---
 
-## 🧮 Mathematical & Architectural Invariants
+## 📄 License
 
-### `.flx` Binary File Format
+This project is licensed under the terms of the **ISC License**. See the [LICENSE](./LICENSE) file for complete details.
 
-Every compiled program is a single `.flx` file laid out as:
+<br>
 
-| Offset (bytes) | Size | Field                       | Notes                                                          |
-|----------------|------|-----------------------------|----------------------------------------------------------------|
-| `[0..4)`       | 4    | **Magic** `FLUX`            | The only checksum the format carries — loader refuses any file that doesn't start with these bytes. |
-| `[4]`          | 1    | **Version** `= 1`           | Bumped only on wire-format-breaking changes.                  |
-| `[5..7)`       | 2    | `ConstantsCount` (Uint16 BE) | Length of the deduplicated constant pool.                      |
-| `[7..11)`      | 4    | `CodeSectionOffset` (Uint32 BE) | Byte offset of the code section, measured from the start of the file. |
-| `[11..15)`     | 4    | `CodeSectionSize`  (Uint32 BE) | Length in bytes of the code section.                            |
-
-After the 15-byte header, the constant pool is laid out sequentially
-as `[Length:Uint32 BE][Raw String Bytes]`. After the constant pool
-comes the code section.
-
-### Custom Heap Manager Allocation
-
-The VM owns a single package-global 1 MB byte array:
-
-```go
-var RAM [1024 * 1024]byte // package memory
-```
-
-Every block is preceded by a **6-byte metadata header**:
-
-| Header bytes | Field         | Type        | Purpose                       |
-|--------------|---------------|-------------|-------------------------------|
-| `[0..4)`     | `BlockSize`   | `uint32` BE | Length of the **data** region immediately following this header (NOT including the header itself). |
-| `[4]`        | `IsAllocated` | `uint8`     | `0` = free, `1` = allocated.  |
-| `[5]`        | (reserved)    | `uint8`     | Padding to keep the header naturally 2-byte aligned. |
-
-When `DeliverChatMessage("Richard", "!hype")` fires, the VM:
-
-1. Computes `len("Richard") + 1 = 8` bytes (the `+1` is the mandatory
-   NUL terminator).
-2. Calls `memory.Alloc(8)`, which scans the heap chain looking for the
-   **first free block** (`first-fit`) whose data region is large
-   enough.
-3. Marks the chosen block as allocated, splits off any leftover bytes
-   (if there's room for another header + data area) into a fresh free
-   block immediately after, and returns the **byte offset** that sits
-   one header past the new allocated block.
-4. Writes `"Richard\x00"` into that offset and logs e.g.
-   `username_addr=44`.
-
-> [!WARNING]
-> **`MOV_REG_STR` overwrites the destination register.** Each `MOV`
-> into a register hands out a **new** heap address. Any previous
-> `ALLOC` in the same register is now unreachable. If you write
-> `ALLOC R1, 32` followed by `MOV R1, "Richard"`, the 32-byte block
-> is **leaked forever** unless explicit records kept elsewhere.
-> This is by design: the machine trusts you, the way `malloc` does.
-
-### Instruction Set Architecture (ISA) Layout
-
-| Opcode | Mnemonic         | Hex  | Layout                                                            |
-|--------|------------------|------|-------------------------------------------------------------------|
-| 0x01   | `OP_ALLOC`       | 0x01 | `[OP_ALLOC] [Reg:1] [Size:Uint32 BE]`                              |
-| 0x02   | `OP_FREE`        | 0x02 | `[OP_FREE]  [Reg:1]`                                               |
-| 0x03   | `OP_MOV_REG_REG` | 0x03 | `[OP_MOV_REG_REG] [DstReg:1] [SrcReg:1]`                           |
-| 0x04   | `OP_MOV_REG_INT` | 0x04 | `[OP_MOV_REG_INT] [DstReg:1] [Value:4-byte BE]` *(bit pattern of `int32`)* |
-| 0x05   | `OP_MOV_REG_STR` | 0x05 | `[OP_MOV_REG_STR] [DstReg:1] [ConstIdx:Uint32 BE]`                 |
-| 0x06   | `OP_TRIGGER_PIN` | 0x06 | `[OP_TRIGGER_PIN] [Pin:Uint8] [State:Uint8]`                       |
-| 0x07   | `OP_SEND_CHAT`   | 0x07 | `[OP_SEND_CHAT] [Operand:Uint32 BE]` *(high-bit-tagged)*          |
-| 0x08   | `OP_ON_CHAT`     | 0x08 | `[OP_ON_CHAT] [TriggerIdx:Uint32 BE] [UserReg:1] [BodyStart:Uint32 BE] [BodyLength:Uint32 BE]` |
-| 0x09   | `OP_ADD`         | 0x09 | `[OP_ADD] [DstReg:1] [SrcReg:1]`                                  |
-| 0x0A   | `OP_SUB`         | 0x0A | `[OP_SUB] [DstReg:1] [SrcReg:1]`                                  |
-| 0x0B   | `OP_MUL`         | 0x0B | `[OP_MUL] [DstReg:1] [SrcReg:1]`                                  |
-| 0x0C   | `OP_DIV`         | 0x0C | `[OP_DIV] [DstReg:1] [SrcReg:1]`                                  |
-| 0x0D   | `OP_AND`         | 0x0D | `[OP_AND] [DstReg:1] [SrcReg:1]`                                  |
-| 0x0E   | `OP_OR`          | 0x0E | `[OP_OR]  [DstReg:1] [SrcReg:1]`                                  |
-| 0x0F   | `OP_XOR`         | 0x0F | `[OP_XOR] [DstReg:1] [SrcReg:1]`                                  |
-| 0x10   | `OP_SHL`         | 0x10 | `[OP_SHL] [DstReg:1] [SrcReg:1]`                                  |
-| 0x11   | `OP_SHR`         | 0x11 | `[OP_SHR] [DstReg:1] [SrcReg:1]`                                  |
-| 0x12   | `OP_CMP`         | 0x12 | `[OP_CMP] [Reg1:1] [Reg2:1]`                                      |
-| 0x13   | `OP_JMP`         | 0x13 | `[OP_JMP] [TargetPC:Uint32 BE]`                                   |
-| 0x14   | `OP_JZ`          | 0x14 | `[OP_JZ]  [TargetPC:Uint32 BE]`                                   |
-| 0x15   | `OP_JNZ`         | 0x15 | `[OP_JNZ] [TargetPC:Uint32 BE]`                                   |
-| 0x16   | `OP_CALL`        | 0x16 | `[OP_CALL] [TargetPC:Uint32 BE]`                                  |
-| 0x17   | `OP_RET`         | 0x17 | `[OP_RET]`                                                        |
-
-`OP_SEND_CHAT` carries a **tagged Uint32 operand**: the high bit cleared
-denotes a register code (`1..16`) whose value the VM reads as a heap
-address holding a NUL-terminated C-string; the high bit set denotes a
-constant-pool index. Single-bit, single-instruction type discrimination
-— no extra byte.
-
-`OP_ON_CHAT` is a 14-byte header followed immediately by the body's
-bytecode. The compiler patches `BodyStart` and `BodyLength` in place
-once the body has finished emitting.
-
-### Memory-leak invariant: runtime detection
-
-The heap manager does **not** auto-coalesce, and the machine does
-**not** track liveness for you. Two invariants are enforced at
-runtime instead. The VM surfaces these by **strerror-style** strings
-returned from `memory/heap.go` and prefixed with the failing
-opcode on stderr:
-
-| Failure scenario                                      | Returned error string                | Typical stderr line (from `vm/main.go`) |
-|-------------------------------------------------------|--------------------------------------|------------------------------------------|
-| Call `Free` with an address below `HeaderSize` or `>= RAMSize` | `"memory: invalid address"`          | `run: FREE: memory: invalid address`     |
-| Call `Free` on a block whose header is already marked free      | `"memory: double free"`              | `run: FREE: memory: double free`         |
-| `Alloc(size)` finds no free block large enough for `size`        | `ErrOOM` (`"memory: out of memory"`) | `run: ALLOC: memory: out of memory`      |
-
-This is the machine's equivalent of a `panic` boundary. It does **not**
-protect you from re-assigning an already-occupied allocation register
-without first executing `FREE` — that class of leak is the program's
-responsibility, exactly like a `C` program leaking a `malloc`'d block
-when its pointer goes out of scope.
-
----
-
-## 📦 Project Structure & Testing
-
-### Monorepo layout
-
-```
-flux-lang/
-├── README.md                       ← you are here
-├── compiler/
-│   ├── go.mod                      ← module name: flux/compiler
-│   ├── main.go                     ← CLI entrypoint (flux-compiler)
-│   ├── main_test.go
-│   ├── ast/
-│   │   └── ast.go                  ← Statement / Expression node types
-│   ├── codegen/
-│   │   ├── opcodes.go              ← ISA + .flx header constants
-│   │   ├── codegen.go              ← AST → .flx emitter
-│   │   └── codegen_test.go
-│   ├── lexer/
-│   │   ├── lexer.go                ← zero-allocation byte lexer
-│   │   └── lexer_test.go
-│   └── parser/
-│       ├── parser.go               ← recursive-descent parser
-│       └── parser_test.go
-└── vm/
-    ├── go.mod                      ← module name: flux/vm
-    ├── main.go                     ← CLI entrypoint (flux-vm)
-    ├── main_test.go
-    ├── cpu/
-    │   ├── cpu.go                  ← Virtual CPU + dispatch loop + event loop
-    │   └── cpu_test.go
-    └── memory/
-        ├── heap.go                 ← Static 1MB RAM + first-fit allocator
-        └── heap_test.go
-```
-
-**Runtime artifacts** (generated by the Quick Start, **not** checked in):
-
-| Path            | Producer                  | Consumer      | Purpose                                                |
-|-----------------|---------------------------|---------------|--------------------------------------------------------|
-| `vm/test.flx`   | `flux-compiler -o …`      | `flux-vm`     | Compiled canonical-program bytecode, fed straight into the VM via `vm/main.go test.flx`. |
-
-The `compiler/` and `vm/` directories are **independent Go modules**
-(`flux/compiler` and `flux/vm`). They share no code; the only thing
-they have in common is the `.flx` byte-level wire format. Either one
-can be vendored, rewritten, or swapped without touching the other.
-
-### Testing pipeline
-
-Both modules expose a native `go test ./...` plus a `go vet` pre-flight:
-
-```bash
-# Compiler
-cd compiler
-go vet ./...
-go test ./... -v -count=1
-
-# VM
-cd ../vm
-go vet ./...
-go test ./... -v -count=1
-```
-
-The test suites cover:
-
-- **Compiler** → tokenisation (Lexer), AST shape (Parser), `.flx`
-  byte-for-byte layout (Codegen), CLI flag wiring.
-- **VM** → `Alloc`+`Free` cycle, double-free and OOM rejection, full
-  round-trip of the canonical assembly program, `OP_MOV_REG_STR`
-  heap-copy including NUL terminator and exact address, `ON_CHAT`
-  registration + body-skip during top-down execution,
-  `DeliverChatMessage` matching / running the body / freeing the
-  username block / restoring the PC.
-
-On the current source tree that's:
-
-| Module             | Test files                                                 | `Test*` funcs |
-|--------------------|------------------------------------------------------------|---------------|
-| `flux/compiler`    | `lexer/lexer_test.go`, `parser/parser_test.go`, `codegen/codegen_test.go`, `main_test.go`    | 27            |
-| `flux/vm`          | `memory/heap_test.go`, `cpu/cpu_test.go`                   | 8             |
-
-All **35 tests pass completely green** with `go vet` silent on both
-modules.
-
----
-
-## License
-
-`flux-lang` is released under the **ISC License**. See [`LICENSE`](LICENSE)
-for the full text.
+<div align="center">
+  <sub>Engineered with obsession for deterministic systems. Built by <a href="https://github.com/Ri4ards2006">Richard Zuikov</a>.</sub>
+</div>
